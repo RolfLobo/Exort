@@ -3,7 +3,6 @@
   import FeaturesSection from "$lib/components/landing/FeaturesSection.svelte";
   import DownloadSection from "$lib/components/landing/DownloadSection.svelte";
   import SiteNav from "$lib/components/landing/SiteNav.svelte";
-  import heroAppImage from "../../../../assets/app.png";
   import serialMonitorImage from "$lib/assets/features/serial-monitor.webp";
   import serialPlotterImage from "$lib/assets/features/serial-plotter.webp";
   import boardManagerImage from "$lib/assets/features/board-manager.webp";
@@ -63,7 +62,7 @@
   let heroActions: HTMLElement | null = null;
   let heroHighlightsWrap: HTMLElement | null = null;
   let heroScreenshotWrap: HTMLElement | null = null;
-  let heroScreenshot: HTMLImageElement | null = null;
+  let heroScreenshot: HTMLVideoElement | null = null;
   let workflowSection: HTMLElement | null = null;
 
   let headlineLineEls: HTMLSpanElement[] = [];
@@ -253,15 +252,17 @@
               <span
                 class="relative inline-block overflow-visible whitespace-nowrap align-top pb-[0.08em] leading-[1.08] drop-shadow-[0_0_14px_rgba(250,189,47,0.14)]"
               >
-                <span class="block text-gruvbox-fg0">
-                  Open Source
-                </span>
+                <span class="block text-gruvbox-fg0"> Open Source </span>
               </span>
               <span
                 class="relative inline-block overflow-visible whitespace-nowrap align-top pb-[0.08em] leading-[1.08] drop-shadow-[0_0_14px_rgba(250,189,47,0.14)]"
               >
-                <span class="inline-grid overflow-visible whitespace-nowrap pb-[0.1em] leading-[1.08]">
-                  <span class="col-start-1 row-start-1 whitespace-nowrap text-transparent">
+                <span
+                  class="inline-grid overflow-visible whitespace-nowrap pb-[0.1em] leading-[1.08]"
+                >
+                  <span
+                    class="col-start-1 row-start-1 whitespace-nowrap text-transparent"
+                  >
                     Coding Agent
                   </span>
                   <span
@@ -294,8 +295,7 @@
                     Coding Agent
                   </span>
                 </span>
-              </span
-              ></span
+              </span></span
             >
           </span>
           <span class="block">
@@ -308,12 +308,29 @@
           </span>
         </h1>
 
-        <p
+        <div
+          bind:this={heroHighlightsWrap}
+          class="mt-8 flex w-full max-w-full flex-nowrap items-center justify-center whitespace-nowrap uppercase text-gruvbox-text/50"
+          aria-label="Key hero highlights"
+        >
+          {#each heroHighlights as highlight, index}
+            <span class="inline-flex shrink-0 items-center whitespace-nowrap">
+              {#if index > 0}
+                <span
+                  class="mx-[0.8rem] text-gruvbox-accent/70"
+                  aria-hidden="true">&bull;</span
+                >
+              {/if}
+              {highlight}
+            </span>
+          {/each}
+        </div>
+        <!-- <p
           bind:this={heroCopy}
           class="mt-4 max-w-2xl text-sm leading-6 text-gruvbox-muted sm:text-base"
         >
           Edit, compile, upload, and monitor devices from one desktop workspace.
-        </p>
+        </p> -->
 
         <div
           bind:this={heroActions}
@@ -348,33 +365,30 @@
             </span>
           </a>
         </div>
-
-        <div
-          bind:this={heroHighlightsWrap}
-          class="mt-8 flex w-full max-w-full flex-nowrap items-center justify-center whitespace-nowrap text-[clamp(0.62rem,1vw,0.82rem)] uppercase tracking-[clamp(0.04em,0.12vw,0.08em)] text-[color:color-mix(in_srgb,rgba(213,196,161,0.78)_72%,#282828_28%)]"
-          aria-label="Key hero highlights"
-        >
-          {#each heroHighlights as highlight, index}
-            <span class="inline-flex shrink-0 items-center whitespace-nowrap">
-              {#if index > 0}
-                <span class="mx-[0.7rem]" aria-hidden="true">&bull;</span>
-              {/if}
-              {highlight}
-            </span>
-          {/each}
-        </div>
       </div>
 
       <div
         bind:this={heroScreenshotWrap}
         class="relative left-1/2 z-10 mt-0 w-[min(100%,72rem)] -translate-x-1/2 px-2 sm:mt-1 sm:px-0 lg:mt-2"
       >
-        <img
-          bind:this={heroScreenshot}
-          src={heroAppImage}
-          alt="Exort desktop application screenshot"
-          class="block h-auto w-full object-contain object-top [will-change:transform]"
-        />
+        <div
+          class="bg-gruvbox-ink p-[10px] mt-5"
+          style="border-radius: 8px !important;"
+        >
+          <video
+            bind:this={heroScreenshot}
+            src="/Exort.mp4"
+            autoplay
+            muted
+            loop
+            playsinline
+            aria-label="Exort desktop application walkthrough video"
+            class="block h-auto w-full object-contain object-top [will-change:transform]"
+            style="border-radius: 8px !important;"
+          >
+            <track kind="captions" />
+          </video>
+        </div>
       </div>
     </section>
 
