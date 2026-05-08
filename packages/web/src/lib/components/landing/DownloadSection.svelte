@@ -1,23 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Copy, CopyCheck } from "lucide-svelte";
-
-  type InstallationGuideStep = {
-    number: string;
-    title: string;
-    body: string[];
-    warningTitle?: string;
-    warningBody?: string[];
-    command?: string;
-    imagePlaceholderLabel?: string;
-    substeps?: InstallationGuideStep[];
-  };
-
-  type InstallationGuidePlatform = {
-    name: string;
-    eyebrow: string;
-    steps: InstallationGuideStep[];
-  };
+  import macDamagedImg from "$lib/assets/download/mac-damaged.webp";
+  import macInstallImg from "$lib/assets/download/mac-install.webp";
+  import macVerifiedImg from "$lib/assets/download/image.png";
 
   let { showInstallationGuide = true }: { showInstallationGuide?: boolean } =
     $props();
@@ -79,12 +65,10 @@
   const localSetupCopyAccentClasses = {
     "copy-all":
       "text-gruvbox-fg1 hover:text-gruvbox-orange focus-visible:text-gruvbox-orange",
-    clone:
-      "hover:text-gruvbox-orange focus-visible:text-gruvbox-orange",
+    clone: "hover:text-gruvbox-orange focus-visible:text-gruvbox-orange",
     cd: "hover:text-gruvbox-green focus-visible:text-gruvbox-green",
     install: "hover:text-gruvbox-blue focus-visible:text-gruvbox-blue",
-    "dev-web":
-      "hover:text-gruvbox-yellow focus-visible:text-gruvbox-yellow",
+    "dev-web": "hover:text-gruvbox-yellow focus-visible:text-gruvbox-yellow",
   } as const;
   const localSetupCopiedTextClasses = {
     "copy-all": "text-gruvbox-orange",
@@ -96,120 +80,9 @@
   const localSetupAllCommand = localSetupCommands
     .map((item) => item.command)
     .join("\n");
-  const installationGuidePlatforms: InstallationGuidePlatform[] = [
-    {
-      name: "macOS",
-      eyebrow: "For Mac devices",
-      steps: [
-        {
-          number: "1",
-          title: "Open the downloaded DMG file",
-          body: [
-            "Locate the downloaded Exort-0.2.2-arm64.dmg file in your Downloads folder and double-click to open it.",
-            "You’ll see a window with the Exort app and Applications folder. Drag Exort to Applications to install.",
-          ],
-          imagePlaceholderLabel: "Add macOS installer window screenshot",
-        },
-        {
-          number: "2",
-          title: "Handle security warnings",
-          body: [],
-          warningTitle: "Security Notice",
-          warningBody: [
-            "macOS will show security warnings since Exort is not signed with an Apple Developer certificate. Follow the appropriate solution below.",
-          ],
-          substeps: [
-            {
-              number: "2.1",
-              title: 'If you see "Exort is damaged" error',
-              body: [
-                "This error occurs due to macOS Gatekeeper. Fix it using Terminal.",
-                "Open Terminal (Applications → Utilities → Terminal).",
-                "Navigate to Applications with the command below.",
-                "Try opening Exort again after running it.",
-              ],
-              command: "cd /Applications\nxattr -c Exort.app",
-              imagePlaceholderLabel:
-                'Add "Exort is damaged" warning screenshot',
-            },
-            {
-              number: "2.2",
-              title: 'If you see "Developer cannot be verified" error',
-              body: [
-                "Click Cancel on the error dialog.",
-                "Go to System Preferences → Security & Privacy → General.",
-                "Click Open Anyway next to the blocked app message.",
-                "Confirm by clicking Open in the next dialog.",
-              ],
-              imagePlaceholderLabel:
-                'Add "Developer cannot be verified" screenshot',
-            },
-          ],
-        },
-        {
-          number: "3",
-          title: "Launch Exort",
-          body: [
-            "Once you’ve resolved any security warnings, you can launch Exort from your Applications folder or using Spotlight search.",
-            "The app will now run normally without further security prompts.",
-          ],
-        },
-        {
-          number: "4",
-          title: "You’re all set!",
-          body: [
-            "Once installed, launch Exort and start building amazing Arduino projects with AI assistance.",
-          ],
-        },
-      ],
-    },
-    {
-      name: "Windows",
-      eyebrow: "For Windows devices",
-      steps: [
-        {
-          number: "1",
-          title: "Run the installer",
-          body: [
-            "Locate the downloaded Exort.Setup.0.2.2-x64.exe file and double-click to run it.",
-          ],
-          warningTitle: "Security Notice",
-          warningBody: [
-            "Windows will show security warnings since Exort is not signed with a trusted certificate.",
-          ],
-          imagePlaceholderLabel: "Add Windows installer warning screenshot",
-        },
-        {
-          number: "2",
-          title: "Bypass Windows security warnings",
-          body: [
-            "You may encounter two types of security warnings.",
-            "Publisher Verification Dialog: Click Run to proceed with installation.",
-            "Windows SmartScreen: Click Run anyway to bypass the protection warning.",
-          ],
-          imagePlaceholderLabel: "Add Windows SmartScreen warning screenshot",
-        },
-        {
-          number: "3",
-          title: "Complete installation",
-          body: [
-            "Follow the installation wizard prompts. Exort will be installed to your Programs folder and a desktop shortcut will be created.",
-            "After installation, you can launch Exort from the Start menu, desktop shortcut, or by searching for Exort.",
-          ],
-        },
-        {
-          number: "4",
-          title: "You’re all set!",
-          body: [
-            "Once installed, launch Exort and start building amazing Arduino projects with AI assistance.",
-          ],
-        },
-      ],
-    },
-  ];
-  let activeInstallationGuidePlatform = $state(
-    installationGuidePlatforms[0]?.name ?? "",
-  );
+  const macSecurityRepairCommand =
+    "xattr -d com.apple.quarantine /Applications/Exort.app";
+  let activeInstallationGuidePlatform = $state("macOS");
 
   let ctaSection: HTMLElement | null = null;
   let ctaIntroEl: HTMLElement | null = null;
@@ -511,9 +384,7 @@
         <h2 class="mt-3 text-3xl font-semibold text-white sm:text-4xl">
           Let&apos;s get Exort running on your setup
         </h2>
-        <p
-          class="mt-4 text-base leading-8 text-gruvbox-muted"
-        >
+        <p class="mt-4 text-base leading-8 text-gruvbox-muted">
           Choose your platform to download the right version
         </p>
       </div>
@@ -540,9 +411,7 @@
               >
                 {@html item.icon}
               </span>
-              <p
-                class="mt-4 text-sm font-light text-gruvbox-text sm:text-base"
-              >
+              <p class="mt-4 text-sm font-light text-gruvbox-text sm:text-base">
                 {item.label}
               </p>
             </div>
@@ -589,51 +458,43 @@
 
       {#if showInstallationGuide}
         <div class="mt-16 w-full max-w-6xl text-left">
-        <div class="mx-auto max-w-3xl text-center">
-          <span
-            class="text-sm uppercase tracking-[0.24em] text-gruvbox-accent-soft"
-          >
-            Installation Guide
-          </span>
-          <h3 class="mt-3 text-2xl font-semibold text-white sm:text-3xl">
-            Follow these steps to install Exort on your computer
-          </h3>
-          <p
-            class="mt-4 text-base leading-8 text-gruvbox-muted"
-          >
-            Choose your platform below.
-          </p>
-        </div>
-
-        <div class="mt-10">
-          <div class="flex justify-center">
-            <div
-              class="inline-flex w-fit flex-wrap justify-center gap-3"
-              role="tablist"
-              aria-label="Installation guide platforms"
+          <div class="mx-auto max-w-3xl text-center">
+            <span
+              class="text-sm uppercase tracking-[0.24em] text-gruvbox-accent-soft"
             >
-              {#each installationGuidePlatforms as platform}
+              Installation Guide
+            </span>
+            <h3 class="mt-3 text-2xl font-semibold text-white sm:text-3xl">
+              Follow these steps to install Exort on your computer
+            </h3>
+            <p class="mt-4 text-base leading-8 text-gruvbox-muted">
+              Choose your platform below.
+            </p>
+          </div>
+
+          <div class="mt-10">
+            <div class="flex justify-center">
+              <div
+                class="inline-flex w-fit flex-wrap justify-center gap-3"
+                role="tablist"
+                aria-label="Installation guide platforms"
+              >
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={activeInstallationGuidePlatform ===
-                    platform.name}
+                  aria-selected={activeInstallationGuidePlatform === "macOS"}
                   class={`group relative inline-flex min-w-[9rem] items-center justify-center overflow-hidden rounded-full px-6 py-3 text-sm font-medium backdrop-blur transition motion-reduce:transition-none ${
-                    activeInstallationGuidePlatform === platform.name
+                    activeInstallationGuidePlatform === "macOS"
                       ? "text-[#333231]"
                       : "border border-[rgba(235,219,178,0.12)] bg-gruvbox-ink hover:border-[rgba(235,219,178,0.2)]"
                   }`}
                   onclick={() => {
-                    activeInstallationGuidePlatform = platform.name;
+                    activeInstallationGuidePlatform = "macOS";
                   }}
                 >
                   <span
-                    class={`absolute inset-0 transition-transform duration-300 ease-out ${
-                      platform.name === "macOS"
-                        ? "bg-[#b8bb26]"
-                        : "bg-gruvbox-orange"
-                    } ${
-                      activeInstallationGuidePlatform === platform.name
+                    class={`absolute inset-0 bg-[#b8bb26] transition-transform duration-300 ease-out ${
+                      activeInstallationGuidePlatform === "macOS"
                         ? "translate-x-0"
                         : "translate-x-full group-hover:translate-x-0 motion-reduce:translate-x-full"
                     }`}
@@ -641,20 +502,50 @@
                   ></span>
                   <span
                     class={`relative z-10 transition-colors duration-300 ${
-                      activeInstallationGuidePlatform === platform.name
+                      activeInstallationGuidePlatform === "macOS"
                         ? "text-[#333231]"
                         : "text-gruvbox-muted group-hover:text-gruvbox-ink"
                     }`}
                   >
-                    {platform.name}
+                    macOS
                   </span>
                 </button>
-              {/each}
-            </div>
-          </div>
 
-          {#each installationGuidePlatforms as platform}
-            {#if activeInstallationGuidePlatform === platform.name}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeInstallationGuidePlatform === "Windows"}
+                  class={`group relative inline-flex min-w-[9rem] items-center justify-center overflow-hidden rounded-full px-6 py-3 text-sm font-medium backdrop-blur transition motion-reduce:transition-none ${
+                    activeInstallationGuidePlatform === "Windows"
+                      ? "text-[#333231]"
+                      : "border border-[rgba(235,219,178,0.12)] bg-gruvbox-ink hover:border-[rgba(235,219,178,0.2)]"
+                  }`}
+                  onclick={() => {
+                    activeInstallationGuidePlatform = "Windows";
+                  }}
+                >
+                  <span
+                    class={`absolute inset-0 bg-gruvbox-orange transition-transform duration-300 ease-out ${
+                      activeInstallationGuidePlatform === "Windows"
+                        ? "translate-x-0"
+                        : "translate-x-full group-hover:translate-x-0 motion-reduce:translate-x-full"
+                    }`}
+                    aria-hidden="true"
+                  ></span>
+                  <span
+                    class={`relative z-10 transition-colors duration-300 ${
+                      activeInstallationGuidePlatform === "Windows"
+                        ? "text-[#333231]"
+                        : "text-gruvbox-muted group-hover:text-gruvbox-ink"
+                    }`}
+                  >
+                    Windows
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {#if activeInstallationGuidePlatform === "macOS"}
               <div
                 class="mx-auto mt-6 w-full max-w-4xl rounded-[1.5rem] border border-[rgba(235,219,178,0.08)] bg-gruvbox-ink p-5 text-left shadow-[0_18px_44px_rgba(0,0,0,0.16)]"
                 role="tabpanel"
@@ -665,165 +556,437 @@
                   <span
                     class="text-sm uppercase tracking-[0.24em] text-gruvbox-accent-soft"
                   >
-                    {platform.eyebrow}
+                    For Mac devices
                   </span>
                   <h4 class="mt-2 text-xl font-semibold text-white sm:text-2xl">
-                    {platform.name}
+                    macOS
                   </h4>
                 </div>
 
                 <div class="mt-6 space-y-5">
-                  {#each platform.steps as step}
-                    <section
-                      class="rounded-[1.1rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.28)] p-5"
-                    >
-                      <div class="flex items-start gap-4">
+                  <section
+                    class="rounded-[1.1rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.28)] p-5"
+                  >
+                    <div class="flex items-start gap-4">
+                      <div
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(60,56,54,0.42)] text-sm font-semibold text-gruvbox-accent"
+                      >
+                        1
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <h5 class="text-lg font-medium text-white">
+                          Open the downloaded DMG file
+                        </h5>
                         <div
-                          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(60,56,54,0.42)] text-sm font-semibold text-gruvbox-accent"
+                          class="mt-3 grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,1fr)] xl:items-start"
                         >
-                          {step.number}
+                          <div class="min-w-0">
+                            <div
+                              class="space-y-3 text-md leading-7 text-gruvbox-muted"
+                            >
+                              <p>
+                                - Locate the downloaded Exort dmg file and
+                                double-click to open it.
+                              </p>
+                              <p>- Drag Exort to Applications to install.</p>
+                            </div>
+                          </div>
+
+                          <div class="flex min-h-[12rem] items-start xl:pt-1">
+                            <div
+                              class="flex min-h-[12rem] w-full items-center justify-center rounded-[0.85rem] border border-dashed border-[rgba(235,219,178,0.14)] bg-[rgba(29,32,33,0.72)] px-5 py-8 text-center text-sm leading-6 text-gruvbox-muted"
+                            >
+                              <img
+                                src={macInstallImg}
+                                alt="macOS installer window screenshot"
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <div class="min-w-0 flex-1">
-                          <h5 class="text-lg font-medium text-white">
-                            {step.title}
-                          </h5>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section
+                    class="rounded-[1.1rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.28)] p-5"
+                  >
+                    <div class="flex items-start gap-4">
+                      <div
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(60,56,54,0.42)] text-sm font-semibold text-gruvbox-accent"
+                      >
+                        2
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <h5 class="text-lg font-medium text-white">
+                          Handle security warnings
+                        </h5>
+                        <div class="mt-3 min-w-0">
                           <div
-                            class={`mt-3 ${
-                              step.imagePlaceholderLabel
-                                ? "grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,1fr)] xl:items-start"
-                                : ""
-                            }`}
+                            class="space-y-3 text-sm leading-7 text-gruvbox-muted"
+                          ></div>
+
+                          <div
+                            class="mt-4 rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-gruvbox-ink p-4"
                           >
-                            <div class="min-w-0">
-                              <div
-                                class="space-y-3 text-sm leading-7 text-gruvbox-muted"
-                              >
-                                {#each step.body as paragraph}
-                                  <p>{paragraph}</p>
-                                {/each}
-                              </div>
+                            <p
+                              class="text-xs font-semibold uppercase tracking-[0.18em] text-gruvbox-accent"
+                            >
+                              Notice
+                            </p>
+                            <div
+                              class="mt-2 space-y-2 text-sm leading-7 text-gruvbox-muted italic"
+                            >
+                              <p>
+                                You're gonna see security warnings because Exort
+                                is not notarized yet. This is expected for apps
+                                distributed outside the App Store.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
 
-                              {#if step.warningTitle}
+                        <div class="mt-5 space-y-4">
+                          <div
+                            class="rounded-[0.95rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(60,56,54,0.24)] p-4"
+                          >
+                            <div class="flex items-start gap-3">
+                              <div class="min-w-0 flex-1">
+                                <h6 class="text-base font-medium text-white">
+                                  If you see "Exort is damaged" error
+                                </h6>
                                 <div
-                                  class="mt-4 rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-gruvbox-ink p-4"
+                                  class="mt-3 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(17rem,1fr)] xl:items-start"
                                 >
-                                  <p
-                                    class="text-xs font-semibold uppercase tracking-[0.18em] text-gruvbox-accent"
-                                  >
-                                    {step.warningTitle}
-                                  </p>
-                                  {#if step.warningBody}
+                                  <div class="min-w-0">
                                     <div
-                                      class="mt-2 space-y-2 text-sm leading-7 text-gruvbox-muted"
+                                      class="space-y-3 text-md leading-7 text-gruvbox-muted mt-10"
                                     >
-                                      {#each step.warningBody as paragraph}
-                                        <p>{paragraph}</p>
-                                      {/each}
+                                      <p>
+                                        Open Terminal (Command + Spacebar to
+                                        launch Spotlight, type "Terminal", and
+                                        hit Enter)
+                                      </p>
+                                      <p>
+                                        Run the command below to remove the
+                                        quarantine
+                                      </p>
                                     </div>
-                                  {/if}
-                                </div>
-                              {/if}
+                                  </div>
 
-                              {#if step.command}
+                                  <div
+                                    class="flex min-h-[11rem] items-start xl:pt-1"
+                                  >
+                                    <div
+                                      class="flex min-h-[11rem] w-full items-center justify-center rounded-[0.85rem] border border-dashed border-[rgba(235,219,178,0.14)] bg-[rgba(29,32,33,0.72)] px-5 py-8 text-center text-sm leading-6 text-gruvbox-muted"
+                                    >
+                                      <img
+                                        src={macDamagedImg}
+                                        alt="macOS Damaged App Warning"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
                                 <div class="mt-4">
                                   <div class="relative">
                                     <pre
-                                      class="m-0 overflow-x-auto rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.72)] px-[0.85rem] py-[0.72rem] pr-14 text-[0.88rem] leading-[1.45] text-gruvbox-fg0"
-                                    ><code
-                                        >{step.command}</code
+                                      class={`m-0 overflow-x-auto rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.72)] px-[0.85rem] py-[0.72rem] pr-14 text-[0.88rem] leading-[1.45] transition-colors duration-200 ${
+                                        copiedCommandKey === "mac-security"
+                                          ? "text-gruvbox-orange"
+                                          : "text-gruvbox-fg0"
+                                      }`}><code>{macSecurityRepairCommand}</code
                                       ></pre>
+                                    <button
+                                      type="button"
+                                      class={`absolute right-[0.6rem] top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center bg-transparent p-2 transition-colors duration-200 focus-visible:outline-none motion-reduce:transition-none ${
+                                        copiedCommandKey === "mac-security"
+                                          ? "text-gruvbox-orange"
+                                          : "text-gruvbox-fg1 hover:text-gruvbox-orange focus-visible:text-gruvbox-orange"
+                                      }`}
+                                      onclick={() =>
+                                        void copyCommand(
+                                          "mac-security",
+                                          macSecurityRepairCommand,
+                                        )}
+                                      aria-label="Copy command"
+                                    >
+                                      {#if copiedCommandKey === "mac-security"}
+                                        <CopyCheck
+                                          class="h-4 w-4"
+                                          aria-hidden="true"
+                                        />
+                                      {:else}
+                                        <Copy
+                                          class="h-4 w-4"
+                                          aria-hidden="true"
+                                        />
+                                      {/if}
+                                    </button>
                                   </div>
-                                </div>
-                              {/if}
-                            </div>
-
-                            {#if step.imagePlaceholderLabel}
-                              <div
-                                class="flex min-h-[12rem] items-start xl:pt-1"
-                              >
-                                <div
-                                  class="flex min-h-[12rem] w-full items-center justify-center rounded-[0.85rem] border border-dashed border-[rgba(235,219,178,0.14)] bg-[rgba(29,32,33,0.72)] px-5 py-8 text-center text-sm leading-6 text-gruvbox-muted"
-                                >
-                                  {step.imagePlaceholderLabel}
                                 </div>
                               </div>
-                            {/if}
+                            </div>
                           </div>
 
-                          {#if step.substeps}
-                            <div class="mt-5 space-y-4">
-                              {#each step.substeps as substep}
+                          <div
+                            class="rounded-[0.95rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(60,56,54,0.24)] p-4 mt-10"
+                          >
+                            <div class="flex items-start gap-3">
+                              <div class="min-w-0 flex-1">
+                                <h6 class="text-base font-medium text-white">
+                                  If you see "Developer cannot be verified"
+                                  error
+                                </h6>
                                 <div
-                                  class="rounded-[0.95rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(60,56,54,0.24)] p-4"
+                                  class="mt-3 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(17rem,1fr)] xl:items-start"
                                 >
-                                  <div class="flex items-start gap-3">
+                                  <div class="min-w-0">
                                     <div
-                                      class="flex h-9 min-w-[3rem] shrink-0 items-center justify-center rounded-[0.75rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.72)] px-3 text-xs font-semibold text-gruvbox-accent-soft"
+                                      class="space-y-3 text-md leading-7 text-gruvbox-muted mt-10"
                                     >
-                                      {substep.number}
+                                      <p>Click "Cancel" on the error dialog.</p>
+                                      <p>
+                                        Go to System Preferences → Security &
+                                        Privacy → General.
+                                      </p>
+                                      <p>
+                                        Click Open Anyway next to the blocked
+                                        app message.
+                                      </p>
                                     </div>
-                                    <div class="min-w-0 flex-1">
-                                      <h6
-                                        class="text-base font-medium text-white"
-                                      >
-                                        {substep.title}
-                                      </h6>
-                                      <div
-                                        class={`mt-3 ${
-                                          substep.imagePlaceholderLabel
-                                            ? "grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(17rem,1fr)] xl:items-start"
-                                            : ""
-                                        }`}
-                                      >
-                                        <div class="min-w-0">
-                                          <div
-                                            class="space-y-3 text-sm leading-7 text-gruvbox-muted"
-                                          >
-                                            {#each substep.body as paragraph}
-                                              <p>{paragraph}</p>
-                                            {/each}
-                                          </div>
+                                  </div>
 
-                                          {#if substep.command}
-                                            <div class="mt-4">
-                                              <div class="relative">
-                                                <pre
-                                                  class="m-0 overflow-x-auto rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.72)] px-[0.85rem] py-[0.72rem] pr-14 text-[0.88rem] leading-[1.45] text-gruvbox-fg0"
-                                                ><code
-                                                    >{substep.command}</code
-                                                  ></pre>
-                                              </div>
-                                            </div>
-                                          {/if}
-                                        </div>
-
-                                        {#if substep.imagePlaceholderLabel}
-                                          <div
-                                            class="flex min-h-[11rem] items-start xl:pt-1"
-                                          >
-                                            <div
-                                              class="flex min-h-[11rem] w-full items-center justify-center rounded-[0.85rem] border border-dashed border-[rgba(235,219,178,0.14)] bg-[rgba(29,32,33,0.72)] px-5 py-8 text-center text-sm leading-6 text-gruvbox-muted"
-                                            >
-                                              {substep.imagePlaceholderLabel}
-                                            </div>
-                                          </div>
-                                        {/if}
-                                      </div>
+                                  <div
+                                    class="flex min-h-[11rem] items-start xl:pt-1"
+                                  >
+                                    <div
+                                      class="flex min-h-[11rem] w-full items-center justify-center rounded-[0.85rem] border border-dashed border-[rgba(235,219,178,0.14)] bg-[rgba(29,32,33,0.72)] px-5 py-8 text-center text-sm leading-6 text-gruvbox-muted"
+                                    >
+                                      <img src={macVerifiedImg} alt="" />
                                     </div>
                                   </div>
                                 </div>
-                              {/each}
+                              </div>
                             </div>
-                          {/if}
+                          </div>
                         </div>
                       </div>
-                    </section>
-                  {/each}
+                    </div>
+                  </section>
+
+                  <section
+                    class="rounded-[1.1rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.28)] p-5"
+                  >
+                    <div class="flex items-start gap-4">
+                      <div
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(60,56,54,0.42)] text-sm font-semibold text-gruvbox-accent"
+                      >
+                        3
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <h5 class="text-lg font-medium text-white">
+                          Launch Exort
+                        </h5>
+                        <div
+                          class="mt-3 space-y-3 text-sm leading-7 text-gruvbox-muted"
+                        >
+                          <p>
+                            Once you’ve resolved any security warnings, you can
+                            launch Exort from your Applications folder or using
+                            Spotlight search.
+                          </p>
+                          <p>
+                            The app will now run normally without further
+                            security prompts.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            {:else if activeInstallationGuidePlatform === "Windows"}
+              <div
+                class="mx-auto mt-6 w-full max-w-4xl rounded-[1.5rem] border border-[rgba(235,219,178,0.08)] bg-gruvbox-ink p-5 text-left shadow-[0_18px_44px_rgba(0,0,0,0.16)]"
+                role="tabpanel"
+              >
+                <div
+                  class="border-b items-center flex flex-col border-[rgba(235,219,178,0.1)] pb-5"
+                >
+                  <span
+                    class="text-sm uppercase tracking-[0.24em] text-gruvbox-accent-soft"
+                  >
+                    For Windows devices
+                  </span>
+                  <h4 class="mt-2 text-xl font-semibold text-white sm:text-2xl">
+                    Windows
+                  </h4>
+                </div>
+
+                <div class="mt-6 space-y-5">
+                  <section
+                    class="rounded-[1.1rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.28)] p-5"
+                  >
+                    <div class="flex items-start gap-4">
+                      <div
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(60,56,54,0.42)] text-sm font-semibold text-gruvbox-accent"
+                      >
+                        1
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <h5 class="text-lg font-medium text-white">
+                          Run the installer
+                        </h5>
+                        <div
+                          class="mt-3 grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,1fr)] xl:items-start"
+                        >
+                          <div class="min-w-0">
+                            <div
+                              class="space-y-3 text-sm leading-7 text-gruvbox-muted"
+                            >
+                              <p>
+                                Locate the downloaded Exort.Setup.0.2.2-x64.exe
+                                file and double-click to run it.
+                              </p>
+                            </div>
+
+                            <div
+                              class="mt-4 rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-gruvbox-ink p-4"
+                            >
+                              <p
+                                class="text-xs font-semibold uppercase tracking-[0.18em] text-gruvbox-accent"
+                              >
+                                Security Notice
+                              </p>
+                              <div
+                                class="mt-2 space-y-2 text-sm leading-7 text-gruvbox-muted"
+                              >
+                                <p>
+                                  Windows will show security warnings since
+                                  Exort is not signed with a trusted
+                                  certificate.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div class="flex min-h-[12rem] items-start xl:pt-1">
+                            <div
+                              class="flex min-h-[12rem] w-full items-center justify-center rounded-[0.85rem] border border-dashed border-[rgba(235,219,178,0.14)] bg-[rgba(29,32,33,0.72)] px-5 py-8 text-center text-sm leading-6 text-gruvbox-muted"
+                            >
+                              Add Windows installer warning screenshot
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section
+                    class="rounded-[1.1rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.28)] p-5"
+                  >
+                    <div class="flex items-start gap-4">
+                      <div
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(60,56,54,0.42)] text-sm font-semibold text-gruvbox-accent"
+                      >
+                        2
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <h5 class="text-lg font-medium text-white">
+                          Bypass Windows security warnings
+                        </h5>
+                        <div
+                          class="mt-3 grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,1fr)] xl:items-start"
+                        >
+                          <div class="min-w-0">
+                            <div
+                              class="space-y-3 text-sm leading-7 text-gruvbox-muted"
+                            >
+                              <p>
+                                You may encounter two types of security
+                                warnings.
+                              </p>
+                              <p>
+                                Publisher Verification Dialog: Click Run to
+                                proceed with installation.
+                              </p>
+                              <p>
+                                Windows SmartScreen: Click Run anyway to bypass
+                                the protection warning.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div class="flex min-h-[12rem] items-start xl:pt-1">
+                            <div
+                              class="flex min-h-[12rem] w-full items-center justify-center rounded-[0.85rem] border border-dashed border-[rgba(235,219,178,0.14)] bg-[rgba(29,32,33,0.72)] px-5 py-8 text-center text-sm leading-6 text-gruvbox-muted"
+                            >
+                              Add Windows SmartScreen warning screenshot
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section
+                    class="rounded-[1.1rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.28)] p-5"
+                  >
+                    <div class="flex items-start gap-4">
+                      <div
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(60,56,54,0.42)] text-sm font-semibold text-gruvbox-accent"
+                      >
+                        3
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <h5 class="text-lg font-medium text-white">
+                          Complete installation
+                        </h5>
+                        <div
+                          class="mt-3 space-y-3 text-sm leading-7 text-gruvbox-muted"
+                        >
+                          <p>
+                            Follow the installation wizard prompts. Exort will
+                            be installed to your Programs folder and a desktop
+                            shortcut will be created.
+                          </p>
+                          <p>
+                            After installation, you can launch Exort from the
+                            Start menu, desktop shortcut, or by searching for
+                            Exort.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section
+                    class="rounded-[1.1rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.28)] p-5"
+                  >
+                    <div class="flex items-start gap-4">
+                      <div
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(60,56,54,0.42)] text-sm font-semibold text-gruvbox-accent"
+                      >
+                        4
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <h5 class="text-lg font-medium text-white">
+                          You’re all set!
+                        </h5>
+                        <div
+                          class="mt-3 space-y-3 text-sm leading-7 text-gruvbox-muted"
+                        >
+                          <p>
+                            Once installed, launch Exort and start building
+                            amazing Arduino projects with AI assistance.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
                 </div>
               </div>
             {/if}
-          {/each}
-        </div>
+          </div>
         </div>
       {/if}
 
@@ -867,10 +1030,7 @@
 
         <div class="mt-4 space-y-2">
           {#each localSetupCommands as item, index}
-            <div
-              bind:this={localSetupCommandEls[index]}
-              class=""
-            >
+            <div bind:this={localSetupCommandEls[index]} class="">
               <div class="relative">
                 <pre
                   class={`m-0 overflow-x-auto rounded-[0.85rem] border border-[rgba(235,219,178,0.08)] bg-[rgba(29,32,33,0.72)] px-[0.85rem] py-[0.72rem] pr-14 text-[0.88rem] leading-[1.45] transition-colors duration-200 ${
@@ -878,11 +1038,8 @@
                       ? localSetupCopiedTextClasses["copy-all"]
                       : copiedCommandKey === item.key
                         ? localSetupCopiedTextClasses[item.key]
-                      : "text-gruvbox-fg0"
-                  }`}
-                ><code
-                    >{item.command}</code
-                  ></pre>
+                        : "text-gruvbox-fg0"
+                  }`}><code>{item.command}</code></pre>
                 <button
                   type="button"
                   class={`absolute right-[0.6rem] top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center bg-transparent p-2 transition-colors duration-200 focus-visible:outline-none motion-reduce:transition-none ${
