@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import FeaturesSection from "$lib/components/landing/FeaturesSection.svelte";
   import DownloadSection from "$lib/components/landing/DownloadSection.svelte";
+  import RunLocallySection from "$lib/components/landing/RunLocallySection.svelte";
   import SiteNav from "$lib/components/landing/SiteNav.svelte";
   import serialMonitorImage from "$lib/assets/features/serial-monitor.webp";
   import serialPlotterImage from "$lib/assets/features/serial-plotter.webp";
@@ -393,8 +394,10 @@
     </section>
 
     <FeaturesSection {features} />
+    <RunLocallySection />
 
-    <DownloadSection showInstallationGuide={false} />
+    <!-- <DownloadSection showInstallationGuide={false} />
+     -->
   </main>
 
   <footer class="bg-[rgba(60,56,54,0.42)]">

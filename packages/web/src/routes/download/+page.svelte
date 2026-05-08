@@ -1,5 +1,6 @@
 <script lang="ts">
   import DownloadSection from "$lib/components/landing/DownloadSection.svelte";
+  import RunLocallySection from "$lib/components/landing/RunLocallySection.svelte";
   import SiteNav from "$lib/components/landing/SiteNav.svelte";
 </script>
 
@@ -14,7 +15,9 @@
 <div class="relative isolate min-h-screen bg-gruvbox-bg text-gruvbox-text">
   <SiteNav />
 
-  <main class="pt-8 sm:pt-12">
+  <main class="flex flex-col items-center pt-8 sm:pt-12">
     <DownloadSection />
+    <!-- <p class="text-gruvbox-fg1">OR</p> -->
+    <RunLocallySection />
   </main>
 </div>
