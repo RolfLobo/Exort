@@ -68,7 +68,7 @@
         "The agent helps debug, compile, and upload to your target board.",
     },
     {
-      title: "Code, Monitor, Improve",
+      title: "Monitor and Iterate",
       color: "text-gruvbox-green",
       description:
         "Write code, monitor device output, and iterate with built-in tools.",
