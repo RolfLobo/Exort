@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { cubicOut } from "svelte/easing";
+  import { fade, scale } from "svelte/transition";
   import {
     BringToFront,
     Dice6,
@@ -90,16 +92,24 @@
 </script>
 
 <div
-  class="fixed inset-0 z-50 flex items-center justify-center bg-dark-bg/80 p-4"
+  class="fixed inset-0 z-50 flex items-center justify-center p-4"
   role="dialog"
   aria-modal="true"
   aria-label="App settings"
   tabindex="-1"
-  onclick={onBackdropClick}
   onkeydown={onBackdropKeydown}
 >
+  <button
+    type="button"
+    class="absolute inset-0 bg-dark-bg/80"
+    aria-label="Close settings"
+    onclick={onBackdropClick}
+    transition:fade={{ duration: 120 }}
+  ></button>
+
   <section
-    class="flex h-[min(680px,calc(100vh-2rem))] w-[min(1120px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-dark-yellow/20 bg-dark-surface shadow-2xl"
+    class="relative origin-bottom-left flex h-[min(680px,calc(100vh-2rem))] w-[min(1120px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-dark-yellow/20 bg-dark-surface shadow-2xl"
+    transition:scale={{ duration: 180, easing: cubicOut, opacity: 0, start: 0.92 }}
   >
     <aside
       class="flex w-48 shrink-0 flex-col border-r border-dark-border bg-dark-bg px-3 py-3"

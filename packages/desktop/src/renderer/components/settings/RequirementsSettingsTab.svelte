@@ -211,6 +211,12 @@
     setProgress(id, 100);
   }
 
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
   async function loadRequirements(
     options: { refresh?: boolean } = {},
   ): Promise<void> {
@@ -302,13 +308,15 @@
         setInstalling(id, true);
         startProgress(id);
         const installed = await installRequirement(id);
-        if (installed) finishProgress(id);
+        if (installed) {
+          finishProgress(id);
+          await sleep(250);
+        }
+        await loadRequirements();
         stopProgressTimer(id);
         setInstalling(id, false);
         clearProgress(id);
       }
-
-      await loadRequirements();
     } catch (error) {
       errorMessage = normalizeStatusMessage(
         error instanceof Error
@@ -368,16 +376,6 @@
       </div>
     </div>
 
-    <div class="flex flex-wrap items-center gap-2 text-[11px] text-dark-fg3">
-      {#if loading}
-        <span
-          class="inline-flex items-center gap-1 rounded border border-dark-border bg-dark-surface px-2 py-1"
-        >
-          <Loader class="h-3 w-3 animate-spin" />
-          Loading...
-        </span>
-      {/if}
-    </div>
   </div>
 
   {#if errorMessage}
