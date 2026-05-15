@@ -386,18 +386,13 @@
   });
 </script>
 
-<div
-  class="chat-composer-root p-3"
-  onselectstart={(event) => {
-    event.preventDefault();
-  }}
->
+<div class="chat-composer-root p-3">
   <div
     class={`rounded-xl border px-3 py-2.5 transition-colors duration-150 ${
       draggingFiles
         ? "border-primary-500 bg-dark-bg1"
         : "border-dark-border bg-dark-bgS/80"
-    } focus-within:border-dark-orange2/50`}
+    } focus-within:border-dark-yellow/50`}
     ondragenter={handleDragEnter}
     ondragover={handleDragOver}
     ondragleave={handleDragLeave}
@@ -458,7 +453,7 @@
     {/if}
 
     <textarea
-      class="w-full resize-none border-0 bg-transparent p-0 text-sm text-dark-fg placeholder:text-dark-fg4 focus:outline-none focus:ring-0"
+      class="chat-timeline-scroll allow-text-selection -mx-3 w-[calc(100%+1.5rem)] resize-none border-0 bg-transparent px-3 py-0 text-sm text-dark-fg placeholder:text-dark-fg4 focus:outline-none focus:ring-0"
       bind:this={textareaEl}
       bind:value={prompt}
       maxlength={MAX_PROMPT_CHARS}
