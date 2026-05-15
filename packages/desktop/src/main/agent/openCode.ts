@@ -7,6 +7,7 @@ import { OPEN_CODE_MODEL, openCodeServerOptions } from './openCodeConfig.js';
 import { ensureManagedOpenCodeBinary, resolveManagedOpenCodeBinary } from './openCodeBinary.js';
 import { ensureOpenCodeIsolation } from './openCodeIsolation.js';
 import { startOpenCodeSidecar } from './openCodeSidecar.js';
+import { EXORT_ARDUINO_CLI_BINARY_ENV, resolveManagedArduinoCliBinary } from '../arduinoCliBinary.js';
 
 type OpenCodeV2ClientModule = {
   createOpencodeClient?: (config?: Record<string, unknown>) => unknown;
@@ -289,6 +290,7 @@ async function createOpenCodeRuntime(log?: OpenCodeLog): Promise<OpenCodeRuntime
   const managedBinary = await ensureManagedOpenCodeBinary({ log, installIfMissing: false });
   await ensureOpenCodeConfigDir(managedBinary.managedRoot, log);
   const isolation = await ensureOpenCodeIsolation();
+  const managedArduinoCli = await resolveManagedArduinoCliBinary();
 
   const sidecar = await startOpenCodeSidecar({
     binaryPath: managedBinary.binaryPath,
@@ -296,7 +298,10 @@ async function createOpenCodeRuntime(log?: OpenCodeLog): Promise<OpenCodeRuntime
     port: openCodeServerOptions.port,
     timeoutMs: openCodeServerOptions.timeout,
     config: openCodeServerOptions.config,
-    envOverrides: isolation.envOverrides,
+    envOverrides: {
+      ...isolation.envOverrides,
+      [EXORT_ARDUINO_CLI_BINARY_ENV]: managedArduinoCli.binaryPath
+    },
     isolationInfo: isolation,
     log
   });

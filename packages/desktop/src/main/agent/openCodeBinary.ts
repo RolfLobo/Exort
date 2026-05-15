@@ -79,6 +79,10 @@ function allowSystemBinaryOverride(): boolean {
   return process.env.EXORT_ALLOW_SYSTEM_OPENCODE?.trim() === '1';
 }
 
+function allowLocalBinaryCopyFallback(): boolean {
+  return process.env.EXORT_ALLOW_LOCAL_OPENCODE_COPY?.trim() === '1';
+}
+
 async function getManagedRoot(): Promise<string> {
   const fromEnv = getManagedRootFromEnv();
   if (fromEnv) return fromEnv;
@@ -430,13 +434,17 @@ export async function ensureManagedOpenCodeBinary(options: EnsureOptions = {}): 
 
   log?.(`runtime:binary:provision:start source=managed version=${resolved.managedVersion} target=${resolved.binaryPath}`);
 
-  const localCopy = await installFromLocalCopy(resolved.binaryPath);
-  if (localCopy.ok) {
-    lastProvisionDiagnostics = null;
-    log?.(`runtime:binary:provision:done source=managed method=copy target=${resolved.binaryPath}`);
-    return resolved;
+  if (allowLocalBinaryCopyFallback()) {
+    const localCopy = await installFromLocalCopy(resolved.binaryPath);
+    if (localCopy.ok) {
+      lastProvisionDiagnostics = null;
+      log?.(`runtime:binary:provision:done source=managed method=copy target=${resolved.binaryPath}`);
+      return resolved;
+    }
+    attemptErrors.push(`copy: ${localCopy.detail ?? 'failed'}`);
+  } else {
+    attemptErrors.push('copy: disabled (set EXORT_ALLOW_LOCAL_OPENCODE_COPY=1 to opt in)');
   }
-  attemptErrors.push(`copy: ${localCopy.detail ?? 'failed'}`);
 
   lastProvisionDiagnostics = attemptErrors.join('; ');
   throw new Error(`Failed to provision managed OpenCode runtime (${attemptErrors.join('; ')})`);

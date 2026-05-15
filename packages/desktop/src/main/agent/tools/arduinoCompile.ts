@@ -32,6 +32,7 @@ const MAX_OUTPUT_LENGTH = 12000;
 const MAX_ERROR_SUMMARY_LINES = 8;
 const MAX_DISCOVERED_SKETCHES = 20;
 const MAX_REPORTED_CANDIDATES = 8;
+const EXORT_ARDUINO_CLI_BINARY_ENV = 'EXORT_ARDUINO_CLI_BINARY';
 const SKETCH_DISCOVERY_IGNORE = new Set([
   '.git',
   'node_modules',
@@ -84,6 +85,11 @@ function withToolRuntimePathEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Pr
   );
   nextEnv[pathKey] = merged.join(path.delimiter);
   return nextEnv;
+}
+
+function resolveArduinoCliCommand(): string {
+  const managed = process.env[EXORT_ARDUINO_CLI_BINARY_ENV]?.trim();
+  return managed && managed.length > 0 ? managed : 'arduino-cli';
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -317,6 +323,7 @@ async function runArduinoCompile(
 ): Promise<CompileRunResult> {
   const tempRoot = path.join(workspaceRoot, '.exort', 'tmp');
   await fs.mkdir(tempRoot, { recursive: true });
+  const arduinoCliCommand = resolveArduinoCliCommand();
 
   const runtimeEnv: NodeJS.ProcessEnv = {
     ...withToolRuntimePathEnv(),
@@ -330,7 +337,7 @@ async function runArduinoCompile(
     const spawnOptions = signal
       ? { cwd: workspaceRoot, env: runtimeEnv, signal }
       : { cwd: workspaceRoot, env: runtimeEnv };
-    const proc = spawn('arduino-cli', args, spawnOptions);
+    const proc = spawn(arduinoCliCommand, args, spawnOptions);
 
     let stdout = '';
     let stderr = '';
@@ -357,7 +364,7 @@ async function runArduinoCompile(
     proc.once('error', (error) => {
       const message =
         (error as NodeJS.ErrnoException).code === 'ENOENT'
-          ? 'arduino-cli not found in PATH.'
+          ? `Arduino CLI not found at ${arduinoCliCommand}.`
           : error instanceof Error
             ? error.message
             : String(error);
@@ -506,7 +513,7 @@ export default tool({
       outputChunkCallback
     );
 
-    const command = ['arduino-cli', ...compileArgs];
+    const command = [resolveArduinoCliCommand(), ...compileArgs];
     const errorSummary = extractErrorSummary(runResult.stdout, runResult.stderr);
     const defaultFailureMessage = `arduino-cli compile failed with exit code ${runResult.exitCode ?? 'unknown'}.`;
     const failureMessage =

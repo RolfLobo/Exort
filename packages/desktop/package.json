@@ -20,6 +20,7 @@
     "preview": "electron-vite preview",
     "requirements:status": "tsx src/main/requirements/cli.ts status",
     "requirements:install": "tsx src/main/requirements/cli.ts install",
+    "requirements:test": "tsx --test src/main/requirements/requirements.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src electron.vite.config.ts svelte.config.js postcss.config.cjs tailwind.config.cjs"
   },

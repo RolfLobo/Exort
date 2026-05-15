@@ -1,0 +1,27 @@
+{
+  "darwin-arm64": {
+    "archiveName": "arduino-cli_1.4.1_macOS_ARM64.tar.gz",
+    "archiveType": "tar.gz",
+    "binaryName": "arduino-cli"
+  },
+  "darwin-x64": {
+    "archiveName": "arduino-cli_1.4.1_macOS_64bit.tar.gz",
+    "archiveType": "tar.gz",
+    "binaryName": "arduino-cli"
+  },
+  "linux-x64": {
+    "archiveName": "arduino-cli_1.4.1_Linux_64bit.tar.gz",
+    "archiveType": "tar.gz",
+    "binaryName": "arduino-cli"
+  },
+  "linux-arm64": {
+    "archiveName": "arduino-cli_1.4.1_Linux_ARM64.tar.gz",
+    "archiveType": "tar.gz",
+    "binaryName": "arduino-cli"
+  },
+  "windows-x64": {
+    "archiveName": "arduino-cli_1.4.1_Windows_64bit.zip",
+    "archiveType": "zip",
+    "binaryName": "arduino-cli"
+  }
+}

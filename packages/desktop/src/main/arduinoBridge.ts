@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import type { ToolContext } from './agent/toolTypes.js';
+import { ensureManagedArduinoCliBinary, withArduinoCliRuntimeEnv } from './arduinoCliBinary.js';
 import { withRuntimePathEnv } from './runtimeEnv.js';
 
 import arduinoCompileTool from './agent/tools/arduinoCompile.js';
@@ -410,10 +411,27 @@ function summarizeUninstallOutput(coreId: string, stdout: string): string {
 }
 
 async function runArduinoCli(args: string[], options: RunArduinoCliOptions = {}): Promise<CommandRunResult> {
+  let binaryPath: string;
+  let runtimeEnv: NodeJS.ProcessEnv;
+
+  try {
+    const managed = await ensureManagedArduinoCliBinary({ installIfMissing: false });
+    binaryPath = managed.binaryPath;
+    runtimeEnv = await withArduinoCliRuntimeEnv(withRuntimePathEnv(options.env));
+  } catch (error) {
+    return {
+      exitCode: null,
+      stdout: '',
+      stderr: '',
+      error: error instanceof Error ? error.message : 'Arduino CLI is not installed.',
+      aborted: false
+    };
+  }
+
   return new Promise((resolve) => {
-    const proc = spawn('arduino-cli', args, {
+    const proc = spawn(binaryPath, args, {
       cwd: options.cwd,
-      env: withRuntimePathEnv(options.env),
+      env: runtimeEnv,
       signal: options.signal
     });
     let stdout = '';
@@ -446,7 +464,7 @@ async function runArduinoCli(args: string[], options: RunArduinoCliOptions = {})
       const message = wasAborted
         ? 'Command was aborted.'
         : (error as NodeJS.ErrnoException).code === 'ENOENT'
-          ? 'arduino-cli not found in PATH.'
+          ? `Managed Arduino CLI not found at ${binaryPath}.`
           : error instanceof Error
             ? error.message
             : String(error);
@@ -535,13 +553,13 @@ async function createWorkspaceTempEnv(workspaceRoot: string): Promise<NodeJS.Pro
   const tempRoot = path.join(workspaceRoot, '.exort', 'tmp');
   await fs.mkdir(tempRoot, { recursive: true });
 
-  return {
+  return withArduinoCliRuntimeEnv({
     ...withRuntimePathEnv(),
     TMPDIR: tempRoot,
     TMP: tempRoot,
     TEMP: tempRoot,
     TEMPDIR: tempRoot
-  };
+  });
 }
 
 export async function listConnectedSerialPorts(): Promise<ListPortsResponse> {
@@ -796,6 +814,8 @@ export async function compileOpenSketchWithArduinoTool(
   const context = createToolContext(target.value.workspaceRoot, outputChunkCallback);
 
   try {
+    const managed = await ensureManagedArduinoCliBinary({ installIfMissing: false });
+    process.env.EXORT_ARDUINO_CLI_BINARY = managed.binaryPath;
     const rawOutput = await arduinoCompileTool.execute(
       {
         sketchPath: target.value.relativeSketchPath,
@@ -838,7 +858,16 @@ export async function uploadOpenSketch(
   }
 
   const commandArgs = ['compile', target.value.sketchDirectoryAbsolute, '--fqbn', fqbn, '--upload', '--port', port];
-  const command = ['arduino-cli', ...commandArgs];
+  let managed: Awaited<ReturnType<typeof ensureManagedArduinoCliBinary>>;
+  try {
+    managed = await ensureManagedArduinoCliBinary({ installIfMissing: false });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Arduino CLI is not installed.'
+    };
+  }
+  const command = [managed.binaryPath, ...commandArgs];
 
   const env = await createWorkspaceTempEnv(target.value.workspaceRoot);
   const runResult = await runArduinoCli(commandArgs, {

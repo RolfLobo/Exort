@@ -33,7 +33,8 @@
   const requirementDescriptions: Record<RequirementId, string> = {
     opencode:
       "Managed by Exort as a private runtime. This does not rely on global OpenCode in terminal PATH.",
-    "arduino-cli": "",
+    "arduino-cli":
+      "Managed by Exort as a private runtime. Board tools use this pinned binary instead of terminal PATH.",
   };
   const monacoThemeOptions: Array<{ value: MonacoThemeId; label: string }> = [
     { value: "vs-dark", label: "VS Dark" },
@@ -183,7 +184,7 @@
     id: RequirementId,
     status: RequirementStatus | undefined,
   ): string[] {
-    if (!status || id !== "opencode") return [];
+    if (!status) return [];
 
     const lines: string[] = [];
     if (status.source) {
@@ -204,6 +205,8 @@
         `Diagnostics: ${normalizeStatusText(status.provisionDiagnostics)}`,
       );
     }
+    if (id !== "opencode") return lines;
+
     lines.push(
       `Isolation: ${
         status.isolated === true
