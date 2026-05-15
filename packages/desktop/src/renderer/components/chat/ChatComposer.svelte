@@ -55,7 +55,9 @@
   );
   let selectedModelLabel = $derived.by(() => {
     const selectedEntry = findSelectedModel(catalogProviders, selectedModel);
-    return selectedEntry?.model.name ?? selectedModel?.modelId ?? OPEN_CODE_MODEL;
+    return (
+      selectedEntry?.model.name ?? selectedModel?.modelId ?? OPEN_CODE_MODEL
+    );
   });
 
   function resizeInput(): void {
@@ -234,16 +236,18 @@
     clearSentAttachments();
     queueMicrotask(() => resizeInput());
 
-    void Promise.resolve(onSend(payload)).then(() => {
-      // Cleared optimistically on submit.
-    }).catch((error) => {
-      console.error("[ChatComposer] send failed", error);
-      if (!prompt.trim() && attachments.length === 0) {
-        prompt = previousPrompt;
-        attachments = previousAttachments;
-        queueMicrotask(() => resizeInput());
-      }
-    });
+    void Promise.resolve(onSend(payload))
+      .then(() => {
+        // Cleared optimistically on submit.
+      })
+      .catch((error) => {
+        console.error("[ChatComposer] send failed", error);
+        if (!prompt.trim() && attachments.length === 0) {
+          prompt = previousPrompt;
+          attachments = previousAttachments;
+          queueMicrotask(() => resizeInput());
+        }
+      });
   }
 
   function getWorkspaceRoot(): string | undefined {
@@ -284,7 +288,9 @@
       if (currentRequestId !== providerRequestId) return;
       catalogProviders = [];
       providerError =
-        error instanceof Error ? error.message : "Failed to load available models.";
+        error instanceof Error
+          ? error.message
+          : "Failed to load available models.";
     } finally {
       if (currentRequestId === providerRequestId) {
         providerLoading = false;
@@ -441,7 +447,7 @@
     {/if}
 
     <textarea
-      class="w-full resize-none border-0 bg-transparent p-0 text-sm text-dark-fg focus:outline-none focus:ring-0"
+      class="w-full resize-none border-0 bg-transparent p-0 text-sm text-dark-fg placeholder:text-dark-fg4 focus:outline-none focus:ring-0"
       bind:this={textareaEl}
       bind:value={prompt}
       maxlength={MAX_PROMPT_CHARS}
@@ -515,7 +521,9 @@
                       >
                         {#each catalogProviders as provider (provider.providerId)}
                           <div class="space-y-1">
-                            <div class="px-1 text-[11px] font-semibold text-dark-fg2">
+                            <div
+                              class="px-1 text-[11px] font-semibold text-dark-fg2"
+                            >
                               {provider.providerName}
                             </div>
                             {#each provider.models as model (model.id)}

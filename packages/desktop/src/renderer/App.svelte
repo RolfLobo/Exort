@@ -100,7 +100,8 @@
   let activeAgentRequestId = $state<string | null>(null);
   let sessionBusy = $state(false);
   let statusText = $state("Local mode");
-  let workspacesBootstrapped = false;
+  let appLayoutHydrated = $state(false);
+  let workspacesBootstrapped = $state(false);
 
   let appStateSnapshot = $state<AppState>(createDefaultAppState());
   let workspaceManagerSnapshot = $state<WorkspaceManagerState>(
@@ -121,6 +122,7 @@
   let workspaceMessagesByRoot = $state<Record<string, ChatItem[]>>({});
   let workspaceSyncStateByRoot = $state<Record<string, AgentSyncState>>({});
   let historyLoadedSessionKeyByRoot = $state<Record<string, string>>({});
+  let historyLoadInFlightByRoot = $state<Record<string, number>>({});
   let sessionPreviewsByWorkspaceId = $state<
     Record<string, AgentSessionSummary[]>
   >({});
@@ -231,6 +233,10 @@
       return status;
     }
     return agentBusy ? "running" : "idle";
+  });
+  let activeHistoryLoading = $derived.by(() => {
+    if (!activeWorkspace) return false;
+    return (historyLoadInFlightByRoot[activeWorkspace.rootPath] ?? 0) > 0;
   });
 
   const watchedFilePaths: Record<string, true> = {};
@@ -539,6 +545,8 @@
     } catch (error) {
       statusText =
         error instanceof Error ? error.message : "Failed to load app state";
+    } finally {
+      appLayoutHydrated = true;
     }
 
     await initializeSavedWorkspaces();
@@ -550,37 +558,38 @@
 
   async function initializeSavedWorkspaces(): Promise<void> {
     if (workspacesBootstrapped) return;
+    try {
+      const saved = await window.electronAPI.listSavedWorkspaces();
+      workspaces = saved.map((workspace) => ({
+        ...workspace,
+        tree: getPersistedWorkspaceState(workspace.rootPath)?.fileTree ?? [],
+      }));
 
-    const saved = await window.electronAPI.listSavedWorkspaces();
-    workspaces = saved.map((workspace) => ({
-      ...workspace,
-      tree: getPersistedWorkspaceState(workspace.rootPath)?.fileTree ?? [],
-    }));
-
-    if (workspaces.length > 0) {
-      const preferredRoot = appStateSnapshot.activeWorkspaceRoot;
-      const targetWorkspace =
-        (preferredRoot &&
-          workspaces.find((item) => item.rootPath === preferredRoot)) ??
-        workspaces[0];
-      activeWorkspaceId = targetWorkspace.id;
-      patchAppState({ activeWorkspaceRoot: targetWorkspace.rootPath });
-      touchRecentWorkspace(targetWorkspace.rootPath);
-      persistWorkspaceMetadata(targetWorkspace, {
-        fileTree: targetWorkspace.tree,
-      });
-      messages = workspaceMessagesByRoot[targetWorkspace.rootPath] ?? [];
-      await restoreWorkspaceOpenFiles(targetWorkspace.rootPath);
-      await ensureWorkspaceTree(targetWorkspace.id);
-      await ensureWorkspaceSessions(targetWorkspace.id);
-      await loadWorkspaceHistory(targetWorkspace.id);
-    } else {
-      patchAppState({ activeWorkspaceRoot: null });
-      activeFilePath = null;
-      openFileOrder = [];
+      if (workspaces.length > 0) {
+        const preferredRoot = appStateSnapshot.activeWorkspaceRoot;
+        const targetWorkspace =
+          (preferredRoot &&
+            workspaces.find((item) => item.rootPath === preferredRoot)) ??
+          workspaces[0];
+        activeWorkspaceId = targetWorkspace.id;
+        patchAppState({ activeWorkspaceRoot: targetWorkspace.rootPath });
+        touchRecentWorkspace(targetWorkspace.rootPath);
+        persistWorkspaceMetadata(targetWorkspace, {
+          fileTree: targetWorkspace.tree,
+        });
+        messages = workspaceMessagesByRoot[targetWorkspace.rootPath] ?? [];
+        await restoreWorkspaceOpenFiles(targetWorkspace.rootPath);
+        await ensureWorkspaceTree(targetWorkspace.id);
+        await ensureWorkspaceSessions(targetWorkspace.id);
+        await loadWorkspaceHistory(targetWorkspace.id);
+      } else {
+        patchAppState({ activeWorkspaceRoot: null });
+        activeFilePath = null;
+        openFileOrder = [];
+      }
+    } finally {
+      workspacesBootstrapped = true;
     }
-
-    workspacesBootstrapped = true;
   }
 
   async function ensureWorkspaceTree(workspaceId: string): Promise<void> {
@@ -980,57 +989,75 @@
       return;
     }
 
-    let effectiveSessionId = requestedSessionId;
-    let result = await window.electronAPI.getAgentHistory({
-      workspaceRoot: workspace.rootPath,
-      limit: 100,
-      sessionId: requestedSessionId ?? undefined,
-    });
-
-    if (!result.ok) {
-      if (requestedSessionId) {
-        persistWorkspaceMetadata(workspace, {
-          currentSessionId: null,
-        });
-        await ensureWorkspaceSessions(workspaceId, { force: true });
-        effectiveSessionId = null;
-        result = await window.electronAPI.getAgentHistory({
-          workspaceRoot: workspace.rootPath,
-          limit: 100,
-        });
-      }
-    }
-
-    if (!result.ok) {
-      statusText = result.error ?? "Failed to load session history";
-      return;
-    }
-
-    const loaded = (result.messages ?? []).map((message) => ({
-      id: message.id,
-      role: message.role,
-      content: message.content,
-      createdAt: message.createdAt,
-      attachments: message.attachments,
-    }));
-
-    const syncSessionId = getHistoryCacheSessionKey(effectiveSessionId);
-    const syncState = replaceSessionMessagesInSyncState({
-      state: getSyncStateForWorkspaceRoot(workspace.rootPath),
-      sessionId: syncSessionId,
-      messages: loaded,
-    });
-    setSyncStateForWorkspaceRoot(workspace.rootPath, syncState);
-
-    setMessagesForWorkspaceRoot(workspace.rootPath, loaded);
-    historyLoadedSessionKeyByRoot = {
-      ...historyLoadedSessionKeyByRoot,
-      [workspace.rootPath]: getHistoryCacheSessionKey(effectiveSessionId),
+    historyLoadInFlightByRoot = {
+      ...historyLoadInFlightByRoot,
+      [workspace.rootPath]:
+        (historyLoadInFlightByRoot[workspace.rootPath] ?? 0) + 1,
     };
 
-    await syncWorkspacePendingInterrupts(workspace.id, {
-      sessionId: effectiveSessionId ?? undefined,
-    });
+    try {
+      let effectiveSessionId = requestedSessionId;
+      let result = await window.electronAPI.getAgentHistory({
+        workspaceRoot: workspace.rootPath,
+        limit: 100,
+        sessionId: requestedSessionId ?? undefined,
+      });
+
+      if (!result.ok) {
+        if (requestedSessionId) {
+          persistWorkspaceMetadata(workspace, {
+            currentSessionId: null,
+          });
+          await ensureWorkspaceSessions(workspaceId, { force: true });
+          effectiveSessionId = null;
+          result = await window.electronAPI.getAgentHistory({
+            workspaceRoot: workspace.rootPath,
+            limit: 100,
+          });
+        }
+      }
+
+      if (!result.ok) {
+        statusText = result.error ?? "Failed to load session history";
+        return;
+      }
+
+      const loaded = (result.messages ?? []).map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        createdAt: message.createdAt,
+        attachments: message.attachments,
+      }));
+
+      const syncSessionId = getHistoryCacheSessionKey(effectiveSessionId);
+      const syncState = replaceSessionMessagesInSyncState({
+        state: getSyncStateForWorkspaceRoot(workspace.rootPath),
+        sessionId: syncSessionId,
+        messages: loaded,
+      });
+      setSyncStateForWorkspaceRoot(workspace.rootPath, syncState);
+
+      setMessagesForWorkspaceRoot(workspace.rootPath, loaded);
+      historyLoadedSessionKeyByRoot = {
+        ...historyLoadedSessionKeyByRoot,
+        [workspace.rootPath]: getHistoryCacheSessionKey(effectiveSessionId),
+      };
+
+      await syncWorkspacePendingInterrupts(workspace.id, {
+        sessionId: effectiveSessionId ?? undefined,
+      });
+    } finally {
+      const current = historyLoadInFlightByRoot[workspace.rootPath] ?? 0;
+      const nextCount = Math.max(0, current - 1);
+      const next = { ...historyLoadInFlightByRoot };
+      if (nextCount > 0) {
+        next[workspace.rootPath] = nextCount;
+      } else {
+        delete next[workspace.rootPath];
+      }
+      historyLoadInFlightByRoot = next;
+    }
   }
 
   async function syncWorkspacePendingInterrupts(
@@ -2478,10 +2505,13 @@
     onToggleChatCollapsed={() => handleChatCollapsedChange(!chatCollapsed)}
   />
 
-  <div
-    class={`flex flex-1 overflow-hidden ${draggingSplitter ? "select-none" : ""}`}
-    bind:this={outerSplitContainerEl}
-  >
+  <div class="relative flex flex-1 overflow-hidden">
+    <div
+      class={`flex flex-1 overflow-hidden ${draggingSplitter ? "select-none" : ""} ${
+        appLayoutHydrated ? "" : "pointer-events-none opacity-0"
+      }`}
+      bind:this={outerSplitContainerEl}
+    >
     <div
       class={`flex border-r border-dark-border ${
         chatCollapsed ? "shrink-0" : "min-w-0"
@@ -2510,6 +2540,8 @@
             workspaceTitle={activeWorkspace?.name?.trim() || "Agent Chat"}
             activeWorkspaceRoot={activeWorkspace?.rootPath ?? null}
             {chatFontSize}
+            bootstrapping={!workspacesBootstrapped}
+            historyLoading={activeHistoryLoading}
             busy={agentBusy}
             stopping={stoppingAgentTurn}
             sessionStatus={activeChatSessionStatus}
@@ -2585,6 +2617,36 @@
         onToggle={handleOutputWindowToggle}
       />
     </div>
+    </div>
+
+    {#if !appLayoutHydrated}
+      <div
+        class="absolute inset-0 flex items-center justify-center p-4"
+        role="status"
+        aria-live="polite"
+        aria-label="Loading layout"
+      >
+        <div
+          class="inline-flex items-center gap-3 rounded-lg border border-dark-border bg-dark-bgS px-4 py-3 text-sm text-dark-fg2"
+        >
+          <span class="flex items-center gap-1.5" aria-hidden="true">
+            <span
+              class="h-2 w-2 rounded-full bg-dark-aqua animate-bounce"
+              style="animation-delay: 0ms;"
+            ></span>
+            <span
+              class="h-2 w-2 rounded-full bg-dark-aqua animate-bounce"
+              style="animation-delay: 120ms;"
+            ></span>
+            <span
+              class="h-2 w-2 rounded-full bg-dark-aqua animate-bounce"
+              style="animation-delay: 240ms;"
+            ></span>
+          </span>
+          <span>Loading layout...</span>
+        </div>
+      </div>
+    {/if}
   </div>
 
   <Toast

@@ -8,6 +8,7 @@
   import type { ChatFontSizePreset } from "../../lib/state/types";
   import ChatComposer from "./ChatComposer.svelte";
   import ChatHeader from "./ChatHeader.svelte";
+  import HistoryLoading from "./HistoryLoading.svelte";
   import ChatTimeline from "./ChatTimeline.svelte";
 
   let {
@@ -15,6 +16,8 @@
     workspaceTitle,
     activeWorkspaceRoot,
     chatFontSize = "default",
+    bootstrapping = false,
+    historyLoading = false,
     busy,
     stopping,
     sessionStatus,
@@ -32,6 +35,8 @@
       workspaceTitle: string;
       activeWorkspaceRoot: string | null;
       chatFontSize?: ChatFontSizePreset;
+      bootstrapping?: boolean;
+      historyLoading?: boolean;
       busy: boolean;
       stopping: boolean;
       sessionStatus: "running" | "idle" | "error";
@@ -56,15 +61,21 @@
     {newSessionDisabled}
   />
   {#if activeWorkspaceRoot}
-    <ChatTimeline
-      {messages}
-      {busy}
-      {sessionStatus}
-      {onPermissionReply}
-      {onQuestionReply}
-      {onQuestionReject}
-    />
+    {#if historyLoading}
+      <HistoryLoading />
+    {:else}
+      <ChatTimeline
+        {messages}
+        {busy}
+        {sessionStatus}
+        {onPermissionReply}
+        {onQuestionReply}
+        {onQuestionReject}
+      />
+    {/if}
     <ChatComposer {activeWorkspaceRoot} {busy} {stopping} {onSend} {onStop} />
+  {:else if bootstrapping}
+    <HistoryLoading />
   {:else}
     <div class="flex min-h-0 flex-1 items-center justify-center p-4">
       <button

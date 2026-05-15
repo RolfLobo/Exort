@@ -438,7 +438,7 @@
       {/if}
 
       <p
-        class="whitespace-pre-wrap rounded-2xl border border-dark-bg3/50 bg-dark-bg1 px-3 py-2 text-sm leading-relaxed text-white"
+        class="whitespace-pre-wrap rounded-2xl border border-dark-bg3/50 bg-dark-bg1 px-3 py-2 text-sm leading-relaxed text-dark-fg0"
       >
         {message.content}
       </p>
