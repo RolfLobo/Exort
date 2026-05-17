@@ -10,7 +10,7 @@ import {
   type MenuItemConstructorOptions
 } from 'electron';
 import Store from 'electron-store';
-import { promises as fs, watch, watchFile, unwatchFile, type FSWatcher } from 'node:fs';
+import { existsSync, promises as fs, watch, watchFile, unwatchFile, type FSWatcher } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -538,6 +538,9 @@ function sanitizeWorkspaceManagerState(input: unknown): WorkspaceManagerState {
   };
 }
 
+const shouldAutoBootstrapRequirementsOnStartup = !existsSync(
+  path.join(app.getPath('userData'), 'config.json')
+);
 const store = new Store<StoreSchema>({
   defaults: {
     workspaces: [],
@@ -1204,6 +1207,13 @@ app.whenReady().then(() => {
         error: error instanceof Error ? error.message : 'Failed to load requirements status.'
       };
     }
+  });
+
+  ipcMain.handle('requirements:should-auto-bootstrap-startup', async () => {
+    return {
+      ok: true,
+      shouldAutoBootstrap: shouldAutoBootstrapRequirementsOnStartup
+    };
   });
 
   ipcMain.handle('requirements:install', async (_event, payload: { id: RequirementId }) => {

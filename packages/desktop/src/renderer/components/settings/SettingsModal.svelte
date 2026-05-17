@@ -22,15 +22,20 @@
     initialTab = "general",
     activeWorkspaceRoot = null,
     onRequirementsUpdated = () => {},
+    autoInstallRequirementsOnOpen = false,
+    onRequirementsAutoInstallConsumed = () => {},
   } = $props<{
     onClose: () => void;
     initialTab?: SettingsTab;
     activeWorkspaceRoot?: string | null;
     onRequirementsUpdated?: (requirements: RequirementStatus[]) => void;
+    autoInstallRequirementsOnOpen?: boolean;
+    onRequirementsAutoInstallConsumed?: () => void;
   }>();
 
   let activeTab = $state<SettingsTab>("general");
   let requirements = $state<RequirementStatus[]>([]);
+  let requirementsAutoInstallPending = $state(false);
 
   const tabs: Array<{
     id: SettingsTab;
@@ -64,6 +69,11 @@
   });
 
   $effect(() => {
+    if (!autoInstallRequirementsOnOpen) return;
+    requirementsAutoInstallPending = true;
+  });
+
+  $effect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
@@ -88,6 +98,11 @@
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     onClose();
+  }
+
+  function handleRequirementsAutoInstallTriggered(): void {
+    requirementsAutoInstallPending = false;
+    onRequirementsAutoInstallConsumed();
   }
 </script>
 
@@ -163,7 +178,11 @@
         {#if activeTab === "general"}
           <GeneralSettingsTab />
         {:else if activeTab === "requirements"}
-          <RequirementsSettingsTab {onRequirementsUpdated} />
+          <RequirementsSettingsTab
+            {onRequirementsUpdated}
+            autoInstallOnMount={requirementsAutoInstallPending}
+            onAutoInstallTriggered={handleRequirementsAutoInstallTriggered}
+          />
         {:else if activeTab === "providers"}
           <ProvidersSettingsTab {activeWorkspaceRoot} />
         {:else}

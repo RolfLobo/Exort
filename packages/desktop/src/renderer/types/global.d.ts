@@ -423,6 +423,11 @@ declare global {
         requirements?: RequirementStatus[];
         error?: string;
       }>;
+      shouldAutoBootstrapRequirementsOnStartup: () => Promise<{
+        ok: boolean;
+        shouldAutoBootstrap: boolean;
+        error?: string;
+      }>;
       installRequirement: (payload: {
         id: RequirementId;
       }) => Promise<{ ok: boolean; result?: RequirementInstallResult; error?: string }>;

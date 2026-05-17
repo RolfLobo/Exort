@@ -167,6 +167,7 @@
   let watchedWorkspaceRoot: string | null = null;
   let workspaceWatchRequestId = 0;
   let requirementsStartupToastChecked = false;
+  let startupRequirementsAutoInstallRequested = $state(false);
   const toastActions = new Map<string, () => void>();
   let navbarHotkeyActions = $state<NavbarHotkeyActions | null>(null);
   let hotkeyKeydownListener: ((event: KeyboardEvent) => void) | null = null;
@@ -951,6 +952,7 @@
 
   function closeSettingsModal(): void {
     settingsModalOpen = false;
+    startupRequirementsAutoInstallRequested = false;
   }
 
   function toggleSettingsModal(initialTab: unknown = "general"): void {
@@ -1022,6 +1024,14 @@
       );
       if (missingRequirements.length === 0) return;
 
+      const startupBootstrapResponse =
+        await window.electronAPI.shouldAutoBootstrapRequirementsOnStartup();
+      if (startupBootstrapResponse.ok && startupBootstrapResponse.shouldAutoBootstrap) {
+        startupRequirementsAutoInstallRequested = true;
+        openSettingsModal("requirements");
+        return;
+      }
+
       showToast({
         id: "missing-requirements",
         title: "Requirements missing",
@@ -1044,6 +1054,10 @@
     }
     if (!hasArduinoCliStatus) return;
     arduinoEnvironmentRefreshKey += 1;
+  }
+
+  function handleRequirementsAutoInstallConsumed(): void {
+    startupRequirementsAutoInstallRequested = false;
   }
 
   async function selectWorkspace(
@@ -3017,6 +3031,8 @@
       initialTab={settingsModalTab}
       activeWorkspaceRoot={activeWorkspace?.rootPath ?? null}
       onRequirementsUpdated={handleRequirementsUpdated}
+      autoInstallRequirementsOnOpen={startupRequirementsAutoInstallRequested}
+      onRequirementsAutoInstallConsumed={handleRequirementsAutoInstallConsumed}
     />
   {/if}
 </div>

@@ -16,8 +16,14 @@
   } from "../../lib/state/stateManager";
   import type { RequirementsState } from "../../lib/state/types";
 
-  let { onRequirementsUpdated = () => {} } = $props<{
+  let {
+    onRequirementsUpdated = () => {},
+    autoInstallOnMount = false,
+    onAutoInstallTriggered = () => {},
+  } = $props<{
     onRequirementsUpdated?: (requirements: RequirementStatus[]) => void;
+    autoInstallOnMount?: boolean;
+    onAutoInstallTriggered?: () => void;
   }>();
 
   const requirementOrder: RequirementId[] = ["opencode", "arduino-cli"];
@@ -46,9 +52,11 @@
   let errorMessage = $state<string | null>(null);
   let manualCommands = $state<string[]>([]);
   const progressTimers = new Map<RequirementId, number>();
+  let autoInstallTriggered = $state(false);
 
   let requirements = $derived(requirementsState.requirements);
   let loading = $derived(requirementsState.loading);
+  let checkedAt = $derived(requirementsState.checkedAt);
   let requirementMap = $derived.by(() => {
     const map: Partial<Record<RequirementId, RequirementStatus>> = {};
     for (const requirement of requirements) {
@@ -76,6 +84,18 @@
       window.clearInterval(timer);
     }
     progressTimers.clear();
+  });
+
+  $effect(() => {
+    if (autoInstallTriggered) return;
+    if (!autoInstallOnMount) return;
+    if (!checkedAt || loading || installAllBusy) return;
+    if (requirements.length === 0) return;
+    if (missingRequirementIds.length === 0) return;
+
+    autoInstallTriggered = true;
+    onAutoInstallTriggered();
+    void installAll();
   });
 
   function normalizeStatusMessage(input: string): string {
@@ -335,6 +355,12 @@
 </script>
 
 <div class="flex min-w-0 flex-col gap-4">
+  {#if autoInstallTriggered && installAllBusy}
+    <p class="text-sm text-dark-fg3">
+      Please wait while requirements are installed.
+    </p>
+  {/if}
+
   <div class="rounded-lg border border-dark-border bg-dark-bg px-3 py-3">
     <div class="mb-2 flex items-start justify-between gap-3">
       <div>

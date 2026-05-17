@@ -459,6 +459,14 @@ const electronAPI = {
       requirements?: RequirementStatus[];
       error?: string;
     }>,
+  shouldAutoBootstrapRequirementsOnStartup: () =>
+    ipcRenderer.invoke(
+      'requirements:should-auto-bootstrap-startup'
+    ) as Promise<{
+      ok: boolean;
+      shouldAutoBootstrap: boolean;
+      error?: string;
+    }>,
   installRequirement: (payload: { id: RequirementId }) =>
     ipcRenderer.invoke('requirements:install', payload) as Promise<{
       ok: boolean;
