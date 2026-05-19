@@ -603,7 +603,9 @@
             >
               <div class="space-y-2.5">
                 <div class="flex items-center justify-between text-[11px]">
-                  <span class="font-medium text-dark-fg1">Select Model</span>
+                  <span class="font-bold text-[12px] text-dark-fg1"
+                    >Select Model</span
+                  >
                 </div>
 
                 {#if providerLoading}
@@ -618,7 +620,7 @@
                       </p>
                     {:else}
                       <div
-                        class="chat-timeline-scroll max-h-52 space-y-2 overflow-y-auto pr-2"
+                        class="chat-timeline-scroll -mb-3 -mx-3 max-h-52 space-y-2 overflow-y-auto px-3 pb-3"
                       >
                         {#each catalogProviders as provider (provider.providerId)}
                           <div class="space-y-1">
@@ -629,26 +631,35 @@
                             </div>
                             {#each provider.models as model (model.id)}
                               <button
-                                class={`w-full rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors duration-150 ${
-                                  isSelectedModel(provider.providerId, model.id)
-                                    ? "border-primary-500 bg-dark-bg1 text-dark-fg1"
-                                    : "border-dark-border bg-dark-bg text-dark-fg3 hover:bg-dark-bg1 hover:text-dark-fg1"
-                                }`}
+                                class={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors
+                                 hover:bg-dark-bg1 duration-150 ${
+                                   isSelectedModel(
+                                     provider.providerId,
+                                     model.id,
+                                   )
+                                     ? "font-medium text-primary-300"
+                                     : "text-dark-fg3 hover:text-dark-fg1"
+                                 }`}
                                 onclick={() =>
                                   selectModel(provider.providerId, model.id)}
                                 title={`${provider.providerId}/${model.id}`}
                               >
-                                <div
-                                  class="flex items-center justify-between gap-2"
-                                >
-                                  <span class="truncate">{model.name}</span>
+                                <span class="min-w-0 truncate">
+                                  {model.name}
+                                </span>
+                                <span class="flex shrink-0 items-center gap-2">
+                                  {#if isSelectedModel(provider.providerId, model.id)}
+                                    <Check
+                                      class="h-3.5 w-3.5 text-primary-300"
+                                    />
+                                  {/if}
                                   {#if model.id === provider.defaultModelId}
                                     <span
                                       class="shrink-0 text-[10px] text-dark-fg4"
                                       >default</span
                                     >
                                   {/if}
-                                </div>
+                                </span>
                               </button>
                             {/each}
                           </div>
@@ -679,12 +690,13 @@
 
           {#if thinkingOpen}
             <div
-              class="absolute bottom-full left-0 z-20 mb-2 w-52 rounded-lg border border-dark-border bg-dark-surface p-2 shadow-lg shadow-dark-bg/40"
+              class="absolute bottom-full left-0 z-20 mb-2 w-40 rounded-lg border border-dark-border bg-dark-surface
+              p-2 shadow-lg shadow-dark-bg/40"
               bind:this={thinkingPopoverEl}
               role="dialog"
               aria-label="Thinking selector"
             >
-              <div class="px-1 pb-1 text-[11px] font-medium text-dark-fg1">
+              <div class="px-1 pb-1 text-[12px] font-bold mb-2 text-dark-fg1">
                 Thinking
               </div>
               <div class="space-y-1">
@@ -693,10 +705,10 @@
                     option.value !== "default" &&
                     !isThinkingLevelSupported(option.value)}
                   <button
-                    class={`flex w-full items-center justify-between rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors duration-150 ${
+                    class={`flex w-full items-center justify-between rounded-md  px-2.5 py-1.5 text-left text-xs transition-colors duration-150 ${
                       option.value === thinkingLevel
-                        ? "border-primary-500 bg-dark-bg1 text-dark-fg1"
-                        : "border-dark-border bg-dark-bg text-dark-fg3 hover:bg-dark-bg1 hover:text-dark-fg1"
+                        ? " text-primary-300"
+                        : " text-dark-fg3 hover:bg-dark-bg1 hover:text-dark-fg1"
                     } ${disabled ? "cursor-not-allowed opacity-45 hover:bg-dark-bg hover:text-dark-fg3" : ""}`}
                     type="button"
                     {disabled}
@@ -706,7 +718,7 @@
                   >
                     <span>{option.label}</span>
                     {#if option.value === thinkingLevel}
-                      <Check class="h-3.5 w-3.5 shrink-0 text-dark-aqua2" />
+                      <Check class="h-3.5 w-3.5 shrink-0 text-primary-300" />
                     {/if}
                   </button>
                 {/each}

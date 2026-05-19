@@ -413,6 +413,9 @@ declare global {
       openWorkspaceInFinder: (payload: {
         rootPath: string;
       }) => Promise<{ ok: boolean; error?: string }>;
+      revealPathInFileManager: (payload: {
+        path: string;
+      }) => Promise<{ ok: boolean; error?: string }>;
       createWorkspaceEntry: (payload: {
         workspaceRoot: string;
         parentPath: string;

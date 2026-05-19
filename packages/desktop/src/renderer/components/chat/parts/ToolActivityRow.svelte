@@ -15,11 +15,13 @@
     normalizeToolName,
     parseToolInput,
   } from "../tools/toolData";
+  import { resolveChatFilePath } from "../chatMarkdown";
 
   type Summary = {
     icon: Component;
     label: string;
     target: string | null;
+    targetFilePath: string | null;
     args: string[];
   };
 
@@ -46,6 +48,7 @@
     if (step.status === "error") return "text-dark-red2";
     return "text-dark-fg3";
   });
+  let canRevealTarget = $derived(Boolean(summary.targetFilePath));
 
   function normalizePath(value: string): string {
     return value.replace(/\\/g, "/").replace(/\/+/g, "/");
@@ -87,12 +90,17 @@
   function buildSummary(currentStep: AgentStep, root: string | null): Summary {
     const toolName = normalizeToolName(currentStep.toolName);
     const input = parseToolInput(currentStep.toolInput);
+    const rawPathTarget = firstInputValue(input, ["filePath", "path"]);
+    const resolvedPathTarget = rawPathTarget
+      ? resolveChatFilePath(rawPathTarget, root)
+      : null;
 
     if (toolName === "read") {
       return {
         icon: FileText,
         label: "Read File",
-        target: displayPath(firstInputValue(input, ["filePath", "path"]), root),
+        target: displayPath(rawPathTarget, root),
+        targetFilePath: resolvedPathTarget,
         args: [],
       };
     }
@@ -102,6 +110,7 @@
         icon: Search,
         label: "Glob",
         target: displayPath(firstInputValue(input, ["path", "cwd"]), root),
+        targetFilePath: null,
         args: [compact(firstInputValue(input, ["pattern"]))].filter(
           (item): item is string => !!item,
         ),
@@ -113,6 +122,7 @@
         icon: Search,
         label: "Search",
         target: displayPath(firstInputValue(input, ["path", "cwd"]), root),
+        targetFilePath: null,
         args: [compact(firstInputValue(input, ["pattern", "query"]))].filter(
           (item): item is string => !!item,
         ),
@@ -124,6 +134,7 @@
         icon: Search,
         label: "List",
         target: displayPath(firstInputValue(input, ["path", "cwd"]), root),
+        targetFilePath: null,
         args: [],
       };
     }
@@ -133,6 +144,7 @@
         icon: ExternalLink,
         label: "Fetch",
         target: compact(firstInputValue(input, ["url", "URL"]), 120),
+        targetFilePath: null,
         args: [],
       };
     }
@@ -142,6 +154,7 @@
         icon: Terminal,
         label: "Shell",
         target: compact(firstInputValue(input, ["command", "cmd"]), 120),
+        targetFilePath: null,
         args: [],
       };
     }
@@ -155,7 +168,8 @@
             : toolName === "apply_patch"
               ? "Apply Patch"
               : "Edit File",
-        target: displayPath(firstInputValue(input, ["filePath", "path"]), root),
+        target: displayPath(rawPathTarget, root),
+        targetFilePath: resolvedPathTarget,
         args: [],
       };
     }
@@ -165,6 +179,7 @@
         icon: Activity,
         label: toolName === "todowrite" ? "Update Todos" : "Read Todos",
         target: null,
+        targetFilePath: null,
         args: [],
       };
     }
@@ -182,8 +197,18 @@
           "description",
         ]),
       ),
+      targetFilePath: null,
       args: [],
     };
+  }
+
+  async function handleTargetClick(event: MouseEvent): Promise<void> {
+    if (!summary.targetFilePath) return;
+    event.preventDefault();
+    event.stopPropagation();
+    await window.electronAPI.revealPathInFileManager({
+      path: summary.targetFilePath,
+    });
   }
 </script>
 
@@ -194,7 +219,17 @@
   <RowIcon class="h-4 w-4 shrink-0 text-dark-fg3" />
   <span class="shrink-0 text-sm font-medium text-dark-fg1">{summary.label}</span>
   {#if summary.target}
-    <span class="min-w-0 truncate text-sm text-dark-fg3">{summary.target}</span>
+    {#if canRevealTarget}
+      <button
+        class="min-w-0 truncate text-sm text-primary-300 underline underline-offset-2 transition-colors hover:text-primary-500"
+        onclick={handleTargetClick}
+        title={`Reveal ${summary.target}`}
+      >
+        {summary.target}
+      </button>
+    {:else}
+      <span class="min-w-0 truncate text-sm text-dark-fg3">{summary.target}</span>
+    {/if}
   {/if}
   {#each summary.args as arg (`arg:${arg}`)}
     <span

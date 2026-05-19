@@ -16,12 +16,15 @@
     onQuestionReply,
     onQuestionReject,
   } = $props<{
-      messages: ChatItem[];
-      showReasoning?: boolean;
-      workspaceRoot?: string | null;
-      busy: boolean;
-      sessionStatus: "running" | "idle" | "error";
-    onUndoChangedFiles?: (files: string[], messageId: string) => Promise<void> | void;
+    messages: ChatItem[];
+    showReasoning?: boolean;
+    workspaceRoot?: string | null;
+    busy: boolean;
+    sessionStatus: "running" | "idle" | "error";
+    onUndoChangedFiles?: (
+      files: string[],
+      messageId: string,
+    ) => Promise<void> | void;
     onPermissionReply?: (
       requestId: string,
       reply: AgentPermissionReply,
@@ -38,7 +41,8 @@
 
   let visibleMessages = $derived(
     messages.filter(
-      (message) => message.role !== "assistant" || shouldRenderAssistantMessage(message),
+      (message) =>
+        message.role !== "assistant" || shouldRenderAssistantMessage(message),
     ),
   );
   let showJumpToLatest = $derived(
@@ -89,9 +93,7 @@
   }
 
   function shouldRenderAssistantMessage(message: ChatItem): boolean {
-    return (
-      hasVisibleAssistantText(message) || (message.steps?.length ?? 0) > 0
-    );
+    return hasVisibleAssistantText(message) || (message.steps?.length ?? 0) > 0;
   }
 
   $effect(() => {
@@ -130,26 +132,24 @@
     {/each}
 
     {#if busy}
-      <div
-        class="flex items-center gap-2 rounded-lg border border-dark-border bg-dark-bgS px-3 py-2 text-xs text-dark-fg3"
-      >
+      <div class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs">
         <span class={`h-2 w-2 rounded-full animate-pulse ${thinkingDotClass}`}
         ></span>
         <span class={thinkingTextClass}>Thinking</span>
-        <span class="flex items-center gap-1">
-          <span
-            class="h-1.5 w-1.5 rounded-full bg-dark-fg4 animate-bounce"
-            style="animation-delay: 0ms;"
-          ></span>
-          <span
-            class="h-1.5 w-1.5 rounded-full bg-dark-fg4 animate-bounce"
-            style="animation-delay: 120ms;"
-          ></span>
-          <span
-            class="h-1.5 w-1.5 rounded-full bg-dark-fg4 animate-bounce"
-            style="animation-delay: 240ms;"
-          ></span>
-        </span>
+        <!-- <span class="flex items-center gap-1">
+        <span
+          class="h-1.5 w-1.5 rounded-full bg-dark-fg4 animate-bounce"
+          style="animation-delay: 0ms;"
+        ></span>
+        <span
+          class="h-1.5 w-1.5 rounded-full bg-dark-fg4 animate-bounce"
+          style="animation-delay: 120ms;"
+        ></span>
+        <span
+          class="h-1.5 w-1.5 rounded-full bg-dark-fg4 animate-bounce"
+          style="animation-delay: 240ms;"
+        ></span>
+      </span> -->
       </div>
     {/if}
   </div>

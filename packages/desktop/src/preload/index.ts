@@ -439,6 +439,8 @@ const electronAPI = {
     ipcRenderer.invoke('workspace:tree', rootPath) as Promise<Array<{ path: string; isDirectory: boolean }>>,
   openWorkspaceInFinder: (payload: { rootPath: string }) =>
     ipcRenderer.invoke('workspace:open-in-finder', payload) as Promise<{ ok: boolean; error?: string }>,
+  revealPathInFileManager: (payload: { path: string }) =>
+    ipcRenderer.invoke('file:reveal-in-manager', payload) as Promise<{ ok: boolean; error?: string }>,
   createWorkspaceEntry: (payload: {
     workspaceRoot: string;
     parentPath: string;

@@ -1260,6 +1260,42 @@ app.whenReady().then(() => {
     return { ok: true };
   });
 
+  ipcMain.handle(
+    'file:reveal-in-manager',
+    async (
+      _event,
+      payload: { path: string }
+    ): Promise<{ ok: boolean; error?: string }> => {
+      try {
+        const targetPath = asNonBlankString(payload?.path);
+        if (!targetPath) {
+          return { ok: false, error: 'path is required.' };
+        }
+
+        const resolvedPath = path.resolve(targetPath);
+        const stat = await fs.stat(resolvedPath);
+        if (stat.isDirectory()) {
+          const result = await shell.openPath(resolvedPath);
+          if (result) {
+            return { ok: false, error: result };
+          }
+          return { ok: true };
+        }
+
+        shell.showItemInFolder(resolvedPath);
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          error: formatWorkspaceFsError(
+            error,
+            'Failed to reveal item in file manager.'
+          )
+        };
+      }
+    }
+  );
+
   ipcMain.handle('file:read', async (_event, filePath: string) => {
     const content = await fs.readFile(filePath, 'utf8');
     return { content };

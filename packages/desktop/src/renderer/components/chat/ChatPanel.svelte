@@ -10,6 +10,10 @@
   import ChatHeader from "./ChatHeader.svelte";
   import HistoryLoading from "./HistoryLoading.svelte";
   import ChatTimeline from "./ChatTimeline.svelte";
+  import {
+    filePathFromChatClickTarget,
+    resolveChatFilePath,
+  } from "./chatMarkdown";
 
   type ChatHeaderContextUsage = {
     hasData: boolean;
@@ -68,11 +72,24 @@
       onQuestionReply: (requestId: string, answers: string[][]) => Promise<void> | void;
       onQuestionReject: (requestId: string) => Promise<void> | void;
     }>();
+
+  async function handleChatPanelClick(event: MouseEvent): Promise<void> {
+    const taggedPath = filePathFromChatClickTarget(event.target);
+    if (!taggedPath) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const resolvedPath = resolveChatFilePath(taggedPath, activeWorkspaceRoot);
+    if (!resolvedPath) return;
+    await window.electronAPI.revealPathInFileManager({ path: resolvedPath });
+  }
 </script>
 
 <div
   class="chat-panel-root flex h-full flex-col bg-dark-bg"
   data-chat-font-size={chatFontSize}
+  onclick={handleChatPanelClick}
 >
   <ChatHeader
     {workspaceTitle}
