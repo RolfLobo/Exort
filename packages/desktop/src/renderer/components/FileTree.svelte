@@ -655,7 +655,7 @@
   });
 </script>
 
-<div class="h-full overflow-y-auto bg-dark-bg p-3">
+<div class="chat-timeline-scroll h-full overflow-y-auto bg-dark-bg p-3">
   <div class="mb-2 flex items-center justify-between gap-2">
     <div class="text-xs uppercase tracking-wide text-dark-fg4">Files</div>
     <div class="flex items-center gap-1">

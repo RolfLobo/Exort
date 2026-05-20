@@ -297,7 +297,9 @@
         <span class="text-xs text-dark-fg3">{filteredInstalled.length}</span>
       </header>
 
-      <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+      <div
+        class="chat-timeline-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
+      >
         {#if loadingInstalled && installedCores.length === 0}
           <div
             class="flex h-full items-center justify-center gap-2 px-3 text-sm text-dark-fg3"
@@ -383,7 +385,9 @@
         <span class="text-xs text-dark-fg3">{filteredCatalog.length}</span>
       </header>
 
-      <div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+      <div
+        class="chat-timeline-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
+      >
         {#if loadingCatalog && catalogCores.length === 0}
           <div
             class="flex h-full items-center justify-center gap-2 px-3 text-sm text-dark-fg3"

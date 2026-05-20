@@ -171,7 +171,7 @@
         {/if} -->
 
         <div
-          class="allow-text-selection min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-xs bg-dark-bg cursor-text"
+          class="chat-timeline-scroll allow-text-selection min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-xs bg-dark-bg cursor-text"
           data-allow-text-selection="true"
           style="-webkit-user-select: text; user-select: text;"
           bind:this={outputContainerEl}

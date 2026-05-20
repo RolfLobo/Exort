@@ -137,7 +137,7 @@
       </div>
     {:else}
       <div
-        class="max-h-[min(28rem,calc(100vh-1rem))] overflow-y-auto rounded-md border border-dark-border bg-dark-bg p-2"
+        class="chat-timeline-scroll max-h-[min(28rem,calc(100vh-1rem))] overflow-y-auto rounded-md border border-dark-border bg-dark-bg p-2"
       >
         <div class="flex flex-col gap-1">
           {#each sessions as session (session.id)}
