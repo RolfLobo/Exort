@@ -695,7 +695,7 @@
     </div>
   {/if}
 
-  {#if isAssistant && changedFilesSummary}
+  {#if isAssistant && changedFilesSummary && !busy}
     <div class="mt-3">
       <ChangedFilesCard
         summary={changedFilesSummary}
