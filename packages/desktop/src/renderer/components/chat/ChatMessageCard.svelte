@@ -8,7 +8,8 @@
     ChatItem,
   } from "../../lib/types";
   import { formatChatTime } from "./chatDate";
-  import { renderMarkdown } from "./chatMarkdown";
+  import { renderMarkdown, resolveChatFilePath } from "./chatMarkdown";
+  import { findToolTargetFilePath } from "./toolPathTarget";
   import ChatStepCard from "./ChatStepCard.svelte";
   import ChangedFilesCard from "./ChangedFilesCard.svelte";
 
@@ -21,6 +22,7 @@
     onPermissionReply,
     onQuestionReply,
     onQuestionReject,
+    onOpenFile,
   } = $props<{
     message: ChatItem;
     showReasoning?: boolean;
@@ -39,6 +41,7 @@
       answers: string[][],
     ) => Promise<void> | void;
     onQuestionReject?: (requestId: string) => Promise<void> | void;
+    onOpenFile?: (filePath: string) => Promise<void> | void;
   }>();
 
   let showPlanningFull = $state(false);
@@ -50,6 +53,7 @@
   let isAssistant = $derived(message.role === "assistant");
   let createdAtLabel = $derived(formatChatTime(message.createdAt));
   const HIDDEN_TOOL_NAMES = new Set(["search", "glob", "grep"]);
+  const EDIT_LIKE_TOOL_NAMES = new Set(["edit", "apply_patch"]);
 
   function parseHiddenToolName(step: AgentStep): string | null {
     if (step.kind !== "tool") return null;
@@ -67,7 +71,34 @@
     return parseHiddenToolName(step) !== null;
   }
 
-  let activitySteps = $derived(
+  function normalizeToolNameForDisplay(step: AgentStep): string | null {
+    if (step.kind !== "tool") return null;
+    const raw = step.toolName?.trim().toLowerCase();
+    if (!raw) return null;
+    const parts = raw.split(/[.:/]/g);
+    return parts[parts.length - 1] ?? raw;
+  }
+
+  function normalizePathForKey(path: string): string {
+    return path.replace(/\\/g, "/").replace(/\/+/g, "/");
+  }
+
+  function findStepFilePath(step: AgentStep): string | null {
+    if (step.kind !== "tool") return null;
+    return findToolTargetFilePath(step);
+  }
+
+  function dedupeKeyForStep(step: AgentStep): string | null {
+    const toolName = normalizeToolNameForDisplay(step);
+    if (!toolName || !EDIT_LIKE_TOOL_NAMES.has(toolName)) return null;
+    const rawPath = findStepFilePath(step);
+    if (!rawPath) return null;
+    const resolvedPath = resolveChatFilePath(rawPath, workspaceRoot);
+    const pathKey = normalizePathForKey(resolvedPath ?? rawPath);
+    return `edit:${pathKey}`;
+  }
+
+  let rawActivitySteps = $derived(
     (message.steps ?? []).filter(
       (step) =>
         !shouldHideToolStep(step) &&
@@ -79,6 +110,65 @@
           step.kind === "question"),
     ),
   );
+  let displayActivitySteps = $derived.by(() => {
+    const enriched: AgentStep[] = [];
+    let lastKnownFilePath: string | null = null;
+
+    for (const step of rawActivitySteps) {
+      if (step.kind !== "tool") {
+        enriched.push(step);
+        continue;
+      }
+
+      const currentPath = findStepFilePath(step);
+      if (currentPath) {
+        lastKnownFilePath = currentPath;
+        enriched.push(step);
+        continue;
+      }
+
+      const toolName = normalizeToolNameForDisplay(step);
+      if (!toolName || !EDIT_LIKE_TOOL_NAMES.has(toolName) || !lastKnownFilePath) {
+        enriched.push(step);
+        continue;
+      }
+
+      const inputRecord = parseRecord(step.toolInput);
+      const nextInput = JSON.stringify({
+        ...inputRecord,
+        filePath: lastKnownFilePath,
+      });
+      enriched.push({
+        ...step,
+        toolInput: nextInput,
+      });
+    }
+
+    return enriched;
+  });
+  let activitySteps = $derived.by(() => {
+    const deduped: AgentStep[] = [];
+    const indexByKey = new Map<string, number>();
+
+    for (const step of displayActivitySteps) {
+      const key = dedupeKeyForStep(step);
+      if (!key) {
+        deduped.push(step);
+        continue;
+      }
+
+      const existingIndex = indexByKey.get(key);
+      if (existingIndex == null) {
+        indexByKey.set(key, deduped.length);
+        deduped.push(step);
+        continue;
+      }
+
+      deduped[existingIndex] = step;
+    }
+
+    return deduped;
+  });
   let stepCount = $derived(activitySteps.length);
   type ChangedFileLine = {
     kind: "meta" | "context" | "add" | "remove";
@@ -392,7 +482,7 @@
 
   let changedFilesSummary = $derived.by(() =>
     isAssistant
-      ? buildChangedFilesSummary(activitySteps, message.content)
+      ? buildChangedFilesSummary(rawActivitySteps, message.content)
       : null,
   );
   let userAttachments = $derived(isUser ? (message.attachments ?? []) : []);
@@ -575,6 +665,7 @@
           {onPermissionReply}
           {onQuestionReply}
           {onQuestionReject}
+          {onOpenFile}
         />
       {/each}
     </div>

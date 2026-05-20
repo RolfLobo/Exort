@@ -7,6 +7,8 @@
     icon: Icon,
     title,
     subtitle,
+    subtitleClickable = false,
+    onSubtitleClick,
     args = [],
     status = "running",
     defaultOpen = false,
@@ -16,6 +18,8 @@
     icon: Component;
     title: string;
     subtitle?: string;
+    subtitleClickable?: boolean;
+    onSubtitleClick?: (event: Event) => void | Promise<void>;
     args?: string[];
     status?: "running" | "ok" | "error";
     defaultOpen?: boolean;
@@ -59,7 +63,28 @@
     <div class="min-w-0 flex-1">
       <div class="truncate text-sm font-medium text-dark-fg1">{title}</div>
       {#if subtitle}
-        <div class="truncate text-[11px] text-dark-fg3">{subtitle}</div>
+        {#if subtitleClickable && onSubtitleClick}
+          <span
+            class="truncate text-[11px] text-primary-300 underline underline-offset-2 transition-colors hover:text-primary-500"
+            role="button"
+            tabindex="0"
+            onclick={(event) => {
+              event.stopPropagation();
+              void onSubtitleClick(event);
+            }}
+            onkeydown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              event.stopPropagation();
+              void onSubtitleClick(event);
+            }}
+            title={`Reveal ${subtitle}`}
+          >
+            {subtitle}
+          </span>
+        {:else}
+          <div class="truncate text-[11px] text-dark-fg3">{subtitle}</div>
+        {/if}
       {/if}
       {#if args.length > 0}
         <div class="mt-1 flex flex-wrap gap-1">

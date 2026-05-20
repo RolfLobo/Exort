@@ -3019,6 +3019,7 @@
             onPermissionReply={handlePermissionReply}
             onQuestionReply={handleQuestionReply}
             onQuestionReject={handleQuestionReject}
+            onOpenFile={openFile}
           />
         </div>
       {/if}

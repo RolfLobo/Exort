@@ -47,6 +47,7 @@
     onPermissionReply,
     onQuestionReply,
     onQuestionReject,
+    onOpenFile,
   } =
     $props<{
       messages: ChatItem[];
@@ -71,6 +72,7 @@
       onPermissionReply: (requestId: string, reply: AgentPermissionReply) => Promise<void> | void;
       onQuestionReply: (requestId: string, answers: string[][]) => Promise<void> | void;
       onQuestionReject: (requestId: string) => Promise<void> | void;
+      onOpenFile?: (filePath: string) => Promise<void> | void;
     }>();
 
   async function handleChatPanelClick(event: MouseEvent): Promise<void> {
@@ -82,6 +84,10 @@
 
     const resolvedPath = resolveChatFilePath(taggedPath, activeWorkspaceRoot);
     if (!resolvedPath) return;
+    if (onOpenFile) {
+      await onOpenFile(resolvedPath);
+      return;
+    }
     await window.electronAPI.revealPathInFileManager({ path: resolvedPath });
   }
 </script>
@@ -109,6 +115,7 @@
       {onPermissionReply}
       {onQuestionReply}
       {onQuestionReject}
+      {onOpenFile}
     />
     <ChatComposer
       {activeWorkspaceRoot}

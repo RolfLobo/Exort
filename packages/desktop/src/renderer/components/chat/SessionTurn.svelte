@@ -11,6 +11,7 @@
     onPermissionReply,
     onQuestionReply,
     onQuestionReject,
+    onOpenFile,
   } = $props<{
     message: ChatItem;
     showReasoning?: boolean;
@@ -20,6 +21,7 @@
     onPermissionReply?: (requestId: string, reply: AgentPermissionReply) => Promise<void> | void;
     onQuestionReply?: (requestId: string, answers: string[][]) => Promise<void> | void;
     onQuestionReject?: (requestId: string) => Promise<void> | void;
+    onOpenFile?: (filePath: string) => Promise<void> | void;
   }>();
 </script>
 
@@ -33,5 +35,6 @@
     {onPermissionReply}
     {onQuestionReply}
     {onQuestionReject}
+    {onOpenFile}
   />
 </div>

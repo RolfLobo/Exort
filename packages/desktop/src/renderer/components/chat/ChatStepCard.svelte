@@ -16,6 +16,7 @@
     onPermissionReply,
     onQuestionReply,
     onQuestionReject,
+    onOpenFile,
   } = $props<{
     step: AgentStep;
     content?: string;
@@ -23,6 +24,7 @@
     onPermissionReply?: (requestId: string, reply: AgentPermissionReply) => Promise<void> | void;
     onQuestionReply?: (requestId: string, answers: string[][]) => Promise<void> | void;
     onQuestionReject?: (requestId: string) => Promise<void> | void;
+    onOpenFile?: (filePath: string) => Promise<void> | void;
   }>();
 
   let expanded = $state(false);
@@ -93,9 +95,9 @@
 {#if step.kind === "tool"}
   <div class="space-y-2">
     {#if step.status === "error"}
-      <MessagePart {step} />
+      <MessagePart {step} {workspaceRoot} {onOpenFile} />
     {:else}
-      <ToolActivityRow {step} {workspaceRoot} />
+      <ToolActivityRow {step} {workspaceRoot} {onOpenFile} />
     {/if}
     {#if step.status !== "running" && content.trim().length > 0}
       <div class="chat-markdown px-2.5 pb-1">

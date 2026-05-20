@@ -15,8 +15,10 @@
   import ToolWebfetch from "../tools/ToolWebfetch.svelte";
   import ToolWrite from "../tools/ToolWrite.svelte";
 
-  let { step } = $props<{
+  let { step, workspaceRoot = null, onOpenFile } = $props<{
     step: AgentStep;
+    workspaceRoot?: string | null;
+    onOpenFile?: (filePath: string) => Promise<void> | void;
   }>();
 
   let toolName = $derived(normalizeToolName(step.toolName));
@@ -37,7 +39,7 @@
 {:else if toolName === "bash"}
   <ToolBash {step} />
 {:else if toolName === "edit" || toolName === "apply_patch"}
-  <ToolEdit {step} />
+  <ToolEdit {step} {workspaceRoot} {onOpenFile} />
 {:else if toolName === "write"}
   <ToolWrite {step} />
 {:else if toolName === "todowrite" || toolName === "todoread"}

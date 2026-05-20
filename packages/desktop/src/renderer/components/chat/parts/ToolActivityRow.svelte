@@ -16,6 +16,7 @@
     parseToolInput,
   } from "../tools/toolData";
   import { resolveChatFilePath } from "../chatMarkdown";
+  import { findToolTargetFilePath } from "../toolPathTarget";
 
   type Summary = {
     icon: Component;
@@ -28,9 +29,11 @@
   let {
     step,
     workspaceRoot = null,
+    onOpenFile,
   } = $props<{
     step: AgentStep;
     workspaceRoot?: string | null;
+    onOpenFile?: (filePath: string) => Promise<void> | void;
   }>();
 
   let summary = $derived(buildSummary(step, workspaceRoot));
@@ -90,7 +93,9 @@
   function buildSummary(currentStep: AgentStep, root: string | null): Summary {
     const toolName = normalizeToolName(currentStep.toolName);
     const input = parseToolInput(currentStep.toolInput);
-    const rawPathTarget = firstInputValue(input, ["filePath", "path"]);
+    const rawPathTarget =
+      firstInputValue(input, ["filePath", "path"]) ??
+      findToolTargetFilePath(currentStep);
     const resolvedPathTarget = rawPathTarget
       ? resolveChatFilePath(rawPathTarget, root)
       : null;
@@ -204,9 +209,11 @@
     if (!summary.targetFilePath) return;
     event.preventDefault();
     event.stopPropagation();
-    await window.electronAPI.revealPathInFileManager({
-      path: summary.targetFilePath,
-    });
+    if (onOpenFile) {
+      await onOpenFile(summary.targetFilePath);
+      return;
+    }
+    await window.electronAPI.revealPathInFileManager({ path: summary.targetFilePath });
   }
 </script>
 

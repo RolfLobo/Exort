@@ -19,6 +19,7 @@
     onPermissionReply,
     onQuestionReply,
     onQuestionReject,
+    onOpenFile,
   } = $props<{
     messages: ChatItem[];
     showReasoning?: boolean;
@@ -39,6 +40,7 @@
       answers: string[][],
     ) => Promise<void> | void;
     onQuestionReject?: (requestId: string) => Promise<void> | void;
+    onOpenFile?: (filePath: string) => Promise<void> | void;
   }>();
 
   let scrollEl = $state<HTMLDivElement | null>(null);
@@ -150,6 +152,7 @@
         {onPermissionReply}
         {onQuestionReply}
         {onQuestionReject}
+        {onOpenFile}
       />
     {/each}
 
