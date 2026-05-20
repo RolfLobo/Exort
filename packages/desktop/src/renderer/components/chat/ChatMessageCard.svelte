@@ -565,7 +565,7 @@
     {#each orderedAssistantParts as part (part.id)}
       {#if part.type !== "tool" && part.text.trim().length > 0}
         <div
-          class={`chat-markdown mt-2 font-thin ${part.type === "reasoning" ? "chat-markdown-planning" : ""}`}
+          class={`chat-markdown allow-text-selection mt-2 font-thin ${part.type === "reasoning" ? "chat-markdown-planning" : ""}`}
         >
           {@html renderMarkdown(part.text)}
         </div>
@@ -574,13 +574,13 @@
   {/if}
 
   {#if isAssistant && stepCount > 0 && !showReasoning && answerPartText}
-    <div class="chat-markdown mt-2 font-thin">
+    <div class="chat-markdown allow-text-selection mt-2 font-thin">
       {@html renderMarkdown(answerPartText)}
     </div>
   {/if}
 
   {#if shouldRenderBody && isAssistant}
-    <div class="chat-markdown font-thin">
+    <div class="chat-markdown allow-text-selection font-thin">
       {@html renderMarkdown(assistantBodyText)}
     </div>
   {/if}

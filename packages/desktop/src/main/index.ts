@@ -874,7 +874,7 @@ function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
-    minWidth: 1120,
+    minWidth: 1250,
     minHeight: 680,
     backgroundColor: '#0f1117',
     icon: APP_ICON_PATH,
