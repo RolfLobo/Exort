@@ -165,9 +165,7 @@
         label:
           toolName === "write"
             ? "Write File"
-            : toolName === "apply_patch"
-              ? "Apply Patch"
-              : "Edit File",
+            : "Edit File",
         target: displayPath(rawPathTarget, root),
         targetFilePath: resolvedPathTarget,
         args: [],

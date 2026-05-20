@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { AgentStep } from "../../../lib/types";
   import { normalizeToolName } from "../tools/toolData";
-  import ToolApplyPatch from "../tools/ToolApplyPatch.svelte";
   import ToolArduinoCompile from "../tools/ToolArduinoCompile.svelte";
   import ToolBash from "../tools/ToolBash.svelte";
   import ToolEdit from "../tools/ToolEdit.svelte";
@@ -37,12 +36,10 @@
   <ToolTask {step} />
 {:else if toolName === "bash"}
   <ToolBash {step} />
-{:else if toolName === "edit"}
+{:else if toolName === "edit" || toolName === "apply_patch"}
   <ToolEdit {step} />
 {:else if toolName === "write"}
   <ToolWrite {step} />
-{:else if toolName === "apply_patch"}
-  <ToolApplyPatch {step} />
 {:else if toolName === "todowrite" || toolName === "todoread"}
   <ToolTodoWrite {step} />
 {:else if toolName === "question"}
