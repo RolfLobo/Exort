@@ -24,6 +24,7 @@ type OpenCodeClientShape = {
     get?: (args?: unknown, options?: unknown) => Promise<unknown>;
     create?: (args?: unknown, options?: unknown) => Promise<unknown>;
     messages?: (args?: unknown, options?: unknown) => Promise<unknown>;
+    diff?: (args?: unknown, options?: unknown) => Promise<unknown>;
     prompt?: (args?: unknown, options?: unknown) => Promise<unknown>;
     promptAsync?: (args?: unknown, options?: unknown) => Promise<unknown>;
     abort?: (args?: unknown, options?: unknown) => Promise<unknown>;
@@ -76,6 +77,7 @@ export type OpenCodeClient = {
     get?: (args?: unknown, options?: unknown) => Promise<unknown>;
     create: (args?: unknown, options?: unknown) => Promise<unknown>;
     messages?: (args?: unknown, options?: unknown) => Promise<unknown>;
+    diff?: (args?: unknown, options?: unknown) => Promise<unknown>;
     prompt: (args?: unknown, options?: unknown) => Promise<unknown>;
     promptAsync?: (args?: unknown, options?: unknown) => Promise<unknown>;
     abort?: (args?: unknown, options?: unknown) => Promise<unknown>;
@@ -132,6 +134,7 @@ function normalizeOpenCodeClient(value: unknown, v2Client?: unknown): OpenCodeCl
   const get = session?.get;
   const create = session?.create;
   const messages = session?.messages;
+  const diff = session?.diff;
   const prompt = session?.prompt;
   const promptAsync = session?.promptAsync;
   const abort = session?.abort;
@@ -169,6 +172,7 @@ function normalizeOpenCodeClient(value: unknown, v2Client?: unknown): OpenCodeCl
       get: typeof get === 'function' ? get.bind(session) : undefined,
       create: create.bind(session),
       messages: typeof messages === 'function' ? messages.bind(session) : undefined,
+      diff: typeof diff === 'function' ? diff.bind(session) : undefined,
       prompt: prompt.bind(session),
       promptAsync: typeof promptAsync === 'function' ? promptAsync.bind(session) : undefined,
       abort: typeof abort === 'function' ? abort.bind(session) : undefined

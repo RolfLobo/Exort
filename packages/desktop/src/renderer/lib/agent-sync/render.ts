@@ -180,6 +180,7 @@ function buildToolStep(
     detail: summarizeDetail(part.output) ?? summarizeDetail(part.input),
     toolInput: part.input,
     toolOutput: part.output,
+    toolMetadata: part.metadata,
     status,
     kind: "tool",
     contentStart: existingStep?.contentStart,

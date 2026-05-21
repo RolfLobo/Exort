@@ -12,6 +12,13 @@ export type OpenCodeTokenBreakdown = {
 
 export type OpenCodeTokenUsage = number | OpenCodeTokenBreakdown;
 
+export type AgentDiffEntry = {
+  file: string;
+  additions: number;
+  deletions: number;
+  patch?: string;
+};
+
 export type AgentRuntimeStreamEvent =
   | {
       type: "content";
@@ -25,7 +32,9 @@ export type AgentRuntimeStreamEvent =
       toolCallId: string;
       output: string;
       isError?: boolean;
+      metadata?: string;
     }
+  | { type: "session_diff"; sessionId?: string; diffs: AgentDiffEntry[] }
   | {
       type: "session_status";
       statusType: string;
@@ -90,6 +99,7 @@ export type AgentSyncPart = {
   text?: string;
   input?: string;
   output?: string;
+  metadata?: string;
   status?: "running" | "ok" | "error";
 };
 

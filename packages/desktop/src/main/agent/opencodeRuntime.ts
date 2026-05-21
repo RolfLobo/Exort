@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { getOpenCodeRuntime, shutdownOpenCode, type OpenCodeClient } from './openCode.js';
@@ -6,7 +8,8 @@ import { OPEN_CODE_MODEL } from './openCodeConfig.js';
 export type AgentStreamEvent =
   | { type: 'content'; content: string; partId?: string; contentKind?: 'reasoning' | 'text' }
   | { type: 'tool_call'; toolCallId: string; name: string; input?: string }
-  | { type: 'tool_result'; toolCallId: string; output: string; isError?: boolean }
+  | { type: 'tool_result'; toolCallId: string; output: string; isError?: boolean; metadata?: string }
+  | { type: 'session_diff'; sessionId?: string; diffs: AgentDiffEntry[] }
   | {
       type: 'session_status';
       statusType: string;
@@ -41,6 +44,13 @@ export type AgentStreamEvent =
   | { type: 'task'; message: string }
   | { type: 'done' }
   | { type: 'error'; error: string };
+
+export type AgentDiffEntry = {
+  file: string;
+  additions: number;
+  deletions: number;
+  patch?: string;
+};
 
 export type AgentHistoryMessage = {
   id: string;
@@ -186,6 +196,12 @@ type OpenCodeSubscription = {
   };
 };
 
+type ToolFileSnapshot = {
+  file: string;
+  absolutePath: string;
+  before: string;
+};
+
 type RunOpenCodeTurnParams = {
   workspaceRoot: string;
   prompt: string;
@@ -273,6 +289,20 @@ function isArduinoCompileToolName(toolName: string): boolean {
   );
 }
 
+function isDiffMutatingToolName(toolName: string): boolean {
+  const normalized = toolName.trim().toLowerCase();
+  const parts = normalized.split(/[.:/]/g);
+  const suffix = parts[parts.length - 1] ?? normalized;
+  return (
+    suffix === 'edit' ||
+    suffix === 'write' ||
+    suffix === 'apply_patch' ||
+    suffix === 'multiedit' ||
+    suffix === 'create' ||
+    suffix === 'file_write'
+  );
+}
+
 function logToolTrace(log: (line: string) => void, toolName: string, line: string): void {
   if (isArduinoCompileToolName(toolName)) {
     log(`${ANSI_GREEN}${line}${ANSI_RESET}`);
@@ -334,6 +364,13 @@ function getFirstNumber(...candidates: unknown[]): number | null {
   }
 
   return null;
+}
+
+function normalizeOpenCodeEventType(value: unknown): string | null {
+  const raw = getFirstString(value);
+  if (!raw) return null;
+  const match = /^(.*)\.\d+$/.exec(raw);
+  return match?.[1] ?? raw;
 }
 
 function isGenericPermissionTitle(value: string | null): boolean {
@@ -1786,9 +1823,351 @@ function serializeForLog(value: unknown, maxLength = 4000): string {
   return compactLogValue(raw, maxLength);
 }
 
+function buildLinePatchFromBeforeAfter(file: string, before: string, after: string): string {
+  const beforeLines = before.replace(/\r\n/g, '\n').split('\n');
+  const afterLines = after.replace(/\r\n/g, '\n').split('\n');
+  if (beforeLines[beforeLines.length - 1] === '') beforeLines.pop();
+  if (afterLines[afterLines.length - 1] === '') afterLines.pop();
+
+  const header = [`--- a/${file}`, `+++ b/${file}`];
+  if (beforeLines.length * afterLines.length > 40_000) {
+    return [
+      ...header,
+      ...beforeLines.map((line) => `-${line}`),
+      ...afterLines.map((line) => `+${line}`)
+    ].join('\n');
+  }
+
+  const dp = Array.from({ length: beforeLines.length + 1 }, () =>
+    Array<number>(afterLines.length + 1).fill(0)
+  );
+  for (let i = beforeLines.length - 1; i >= 0; i -= 1) {
+    for (let j = afterLines.length - 1; j >= 0; j -= 1) {
+      dp[i]![j] =
+        beforeLines[i] === afterLines[j]
+          ? dp[i + 1]![j + 1]! + 1
+          : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+    }
+  }
+
+  const lines = [...header];
+  let i = 0;
+  let j = 0;
+  while (i < beforeLines.length && j < afterLines.length) {
+    if (beforeLines[i] === afterLines[j]) {
+      lines.push(` ${beforeLines[i]}`);
+      i += 1;
+      j += 1;
+    } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+      lines.push(`-${beforeLines[i]}`);
+      i += 1;
+    } else {
+      lines.push(`+${afterLines[j]}`);
+      j += 1;
+    }
+  }
+  while (i < beforeLines.length) {
+    lines.push(`-${beforeLines[i]}`);
+    i += 1;
+  }
+  while (j < afterLines.length) {
+    lines.push(`+${afterLines[j]}`);
+    j += 1;
+  }
+  return lines.join('\n');
+}
+
+function getRecordKeysForDebug(value: unknown): string {
+  const record = asRecord(value);
+  return Object.keys(record).slice(0, 20).join(',') || '(none)';
+}
+
+function hasNestedDiffText(value: unknown, depth = 0): boolean {
+  if (depth > 5) return false;
+  if (typeof value === 'string') {
+    return (
+      value.includes('diff --git') ||
+      value.includes('*** Begin Patch') ||
+      value.includes('\n@@') ||
+      value.includes('\n+++ ') ||
+      value.includes('\n--- ')
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => hasNestedDiffText(item, depth + 1));
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.values(value as Record<string, unknown>).some((item) => hasNestedDiffText(item, depth + 1));
+  }
+  return false;
+}
+
+function getNestedPathForDebug(value: unknown, depth = 0): string | null {
+  if (depth > 5 || typeof value !== 'object' || value === null) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = getNestedPathForDebug(item, depth + 1);
+      if (nested) return nested;
+    }
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const path = getFirstNonBlankString(
+    record.file,
+    record.path,
+    record.filePath,
+    record.file_path,
+    record.relativePath,
+    record.relative_path,
+    record.filename
+  );
+  if (path) return path;
+
+  for (const item of Object.values(record)) {
+    const nested = getNestedPathForDebug(item, depth + 1);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function logSessionDiffRawEvent(rawEvent: unknown, expectedSessionId: string, log: (line: string) => void): void {
+  const event = asRecord(rawEvent);
+  const properties = asRecord(event.properties);
+  const rawDiff = properties.diff;
+  const rawCount = Array.isArray(rawDiff) ? rawDiff.length : -1;
+  const parsed = parseDiffEntries(rawDiff);
+  const propertySessionId = getFirstNonBlankString(properties.sessionID, properties.sessionId) ?? '(missing)';
+  const files = parsed.map((item) => `${item.file}(+${item.additions}/-${item.deletions})`).join(',') || '(none)';
+  const rawKeys = Array.isArray(rawDiff) && rawDiff[0] ? getRecordKeysForDebug(rawDiff[0]) : '(none)';
+  log(
+    `DiffDebug runtime raw-session.diff expectedSession=${expectedSessionId} propertySession=${propertySessionId} rawCount=${rawCount} parsedCount=${parsed.length} firstKeys=${rawKeys} files=${compactLogValue(files, 800)}`
+  );
+}
+
+function logDiffToolPayload(
+  log: (line: string) => void,
+  toolName: string,
+  toolCallId: string,
+  input: string | undefined,
+  output: string | undefined,
+  status: string,
+  metadata: string | undefined
+): void {
+  if (!isDiffMutatingToolName(toolName)) return;
+  const inputRecord = input ? parseJsonRecordForDebug(input) : {};
+  const outputRecord = output ? parseJsonRecordForDebug(output) : {};
+  const metadataRecord = metadata ? parseJsonRecordForDebug(metadata) : {};
+  log(
+    `DiffDebug runtime tool name=${toolName} id=${toolCallId} status=${status} inputKeys=${getRecordKeysForDebug(inputRecord)} outputKeys=${getRecordKeysForDebug(outputRecord)} metadataKeys=${getRecordKeysForDebug(metadataRecord)} inputPath=${compactLogValue(getNestedPathForDebug(inputRecord) ?? '(none)', 240)} outputPath=${compactLogValue(getNestedPathForDebug(outputRecord) ?? '(none)', 240)} metadataPath=${compactLogValue(getNestedPathForDebug(metadataRecord) ?? '(none)', 240)} inputHasPatch=${hasNestedDiffText(inputRecord)} outputHasPatch=${hasNestedDiffText(outputRecord)} metadataHasPatch=${hasNestedDiffText(metadataRecord)}`
+  );
+}
+
+function parseJsonRecordForDebug(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Ignore non-JSON tool payloads.
+  }
+  return {};
+}
+
+function resolveToolFilePath(workspaceRoot: string, rawPath: string): { file: string; absolutePath: string } {
+  const normalized = rawPath.replace(/\\/g, '/');
+  if (path.isAbsolute(normalized)) {
+    return {
+      file: normalized,
+      absolutePath: normalized
+    };
+  }
+
+  return {
+    file: normalized,
+    absolutePath: path.resolve(workspaceRoot, normalized)
+  };
+}
+
+function readTextFileSnapshot(absolutePath: string): string {
+  try {
+    return readFileSync(absolutePath, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+function captureToolFileSnapshot(
+  workspaceRoot: string,
+  input: string | undefined,
+  log: (line: string) => void,
+  toolCallId: string,
+  toolName: string
+): ToolFileSnapshot | null {
+  if (!input || !isDiffMutatingToolName(toolName)) return null;
+  const inputRecord = parseJsonRecordForDebug(input);
+  const rawPath = getNestedPathForDebug(inputRecord);
+  if (!rawPath) return null;
+
+  const resolved = resolveToolFilePath(workspaceRoot, rawPath);
+  const before = readTextFileSnapshot(resolved.absolutePath);
+  log(
+    `DiffDebug runtime snapshot-before tool=${toolName} id=${toolCallId} file=${compactLogValue(resolved.file, 300)} chars=${before.length}`
+  );
+  return {
+    file: resolved.file,
+    absolutePath: resolved.absolutePath,
+    before
+  };
+}
+
+function countPatchStats(patch: string): { additions: number; deletions: number } {
+  let additions = 0;
+  let deletions = 0;
+  for (const line of patch.split('\n')) {
+    if (line.startsWith('+') && !line.startsWith('+++')) additions += 1;
+    if (line.startsWith('-') && !line.startsWith('---')) deletions += 1;
+  }
+  return { additions, deletions };
+}
+
+function buildDiffFromToolSnapshot(snapshot: ToolFileSnapshot): AgentDiffEntry | null {
+  const after = readTextFileSnapshot(snapshot.absolutePath);
+  if (after === snapshot.before) return null;
+
+  const patch = buildLinePatchFromBeforeAfter(snapshot.file, snapshot.before, after);
+  const stats = countPatchStats(patch);
+  return {
+    file: snapshot.file,
+    additions: stats.additions,
+    deletions: stats.deletions,
+    patch
+  };
+}
+
+function mergeDiffIntoToolMetadata(metadata: string | undefined, diff: AgentDiffEntry): string {
+  const record = metadata ? parseJsonRecordForDebug(metadata) : {};
+  const files = Array.isArray(record.files) ? [...record.files] : [];
+  const replacement = {
+    relativePath: diff.file,
+    filePath: diff.file,
+    additions: diff.additions,
+    deletions: diff.deletions,
+    patch: diff.patch
+  };
+  const index = files.findIndex((file) => {
+    if (!file || typeof file !== 'object') return false;
+    const candidate = file as Record<string, unknown>;
+    const candidatePath = getFirstNonBlankString(
+      candidate.relativePath,
+      candidate.filePath,
+      candidate.file,
+      candidate.path
+    );
+    return candidatePath === diff.file;
+  });
+  if (index >= 0) {
+    files[index] = {
+      ...(typeof files[index] === 'object' && files[index] !== null ? (files[index] as Record<string, unknown>) : {}),
+      ...replacement
+    };
+  } else {
+    files.push(replacement);
+  }
+  return JSON.stringify({
+    ...record,
+    files
+  });
+}
+
+async function fetchSessionDiffEntries(params: {
+  client: OpenCodeClient;
+  workspaceRoot: string;
+  sessionId: string;
+  messageId?: string;
+  signal: AbortSignal;
+  log: (line: string) => void;
+}): Promise<AgentDiffEntry[]> {
+  const diff = params.client.session.diff;
+  if (typeof diff !== 'function') {
+    params.log('DiffDebug runtime fetch-session-diff unsupported');
+    return [];
+  }
+
+  const attempts = params.messageId ? [params.messageId, undefined] : [undefined];
+  for (const messageId of attempts) {
+    if (params.signal.aborted) return [];
+    try {
+      const response = await diff({
+        sessionID: params.sessionId,
+        directory: params.workspaceRoot,
+        messageID: messageId
+      });
+      const responseError = getResponseErrorMessage(response);
+      if (responseError) {
+        params.log(
+          `DiffDebug runtime fetch-session-diff error messageID=${messageId ?? '(latest)'} message=${serializeForLog(responseError, 1000)}`
+        );
+        continue;
+      }
+
+      const data = extractResponseData(response);
+      const rawCount = Array.isArray(data) ? data.length : -1;
+      const parsed = parseDiffEntries(data);
+      const firstKeys = Array.isArray(data) && data[0] ? getRecordKeysForDebug(data[0]) : '(none)';
+      const files = parsed.map((item) => `${item.file}(+${item.additions}/-${item.deletions})`).join(',') || '(none)';
+      params.log(
+        `DiffDebug runtime fetch-session-diff messageID=${messageId ?? '(latest)'} rawCount=${rawCount} parsedCount=${parsed.length} firstKeys=${firstKeys} files=${compactLogValue(files, 800)}`
+      );
+      if (parsed.length > 0) {
+        return parsed;
+      }
+    } catch (error) {
+      params.log(
+        `DiffDebug runtime fetch-session-diff exception messageID=${messageId ?? '(latest)'} message=${serializeForLog(getErrorMessage(error), 1000)}`
+      );
+    }
+  }
+
+  return [];
+}
+
+function parseDiffEntry(value: unknown): AgentDiffEntry | null {
+  const record = asRecord(value);
+  const file = getFirstNonBlankString(
+    record.file,
+    record.path,
+    record.filePath,
+    record.file_path,
+    record.relativePath,
+    record.relative_path
+  );
+  if (!file) return null;
+
+  const before = getFirstString(record.before);
+  const after = getFirstString(record.after);
+  const patch =
+    getFirstNonBlankString(record.patch, record.diff) ??
+    (before !== null && after !== null ? buildLinePatchFromBeforeAfter(file, before, after) : undefined);
+  return {
+    file,
+    additions: Math.max(0, Math.trunc(getFirstNumber(record.additions, record.insertions, record.added) ?? 0)),
+    deletions: Math.max(0, Math.trunc(getFirstNumber(record.deletions, record.deletes, record.removed) ?? 0)),
+    patch
+  };
+}
+
+function parseDiffEntries(value: unknown): AgentDiffEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => parseDiffEntry(item))
+    .filter((item): item is AgentDiffEntry => item !== null);
+}
+
 function logRawEvent(rawEvent: unknown, log: (line: string) => void): void {
   const event = asRecord(rawEvent);
-  const type = getFirstString(event.type) ?? 'unknown';
+  const type = normalizeOpenCodeEventType(event.type) ?? 'unknown';
   if (type === 'message.part.updated') {
     return;
   }
@@ -1888,11 +2267,13 @@ function parseToolPart(part: Record<string, unknown>): AgentStreamEvent | null {
 
   if (status === 'completed' || status === 'error') {
     const output = status === 'error' ? stringifyUnknown(state.error) : stringifyUnknown(state.output);
+    const metadata = stringifyUnknown(state.metadata);
     return {
       type: 'tool_result',
       toolCallId: parseToolId(part),
       output,
-      isError: status === 'error'
+      isError: status === 'error',
+      metadata: metadata || undefined
     };
   }
 
@@ -1956,7 +2337,7 @@ function captureContentPartKindFromRawEvent(
   partKindById: Map<string, 'reasoning' | 'text'>
 ): void {
   const event = asRecord(rawEvent);
-  const type = getFirstString(event.type);
+  const type = normalizeOpenCodeEventType(event.type);
   if (type !== 'message.part.updated') return;
 
   const properties = asRecord(event.properties);
@@ -1987,7 +2368,7 @@ function captureContentPartKindFromRawEvent(
 
 function parseEvent(rawEvent: unknown, expectedSessionId: string): AgentStreamEvent | null {
   const event = asRecord(rawEvent);
-  const type = getFirstString(event.type);
+  const type = normalizeOpenCodeEventType(event.type);
   if (!type) return null;
 
   const properties = asRecord(event.properties);
@@ -2027,6 +2408,16 @@ function parseEvent(rawEvent: unknown, expectedSessionId: string): AgentStreamEv
       message,
       attempt,
       next
+    };
+  }
+
+  if (type === 'session.diff') {
+    const diffs = parseDiffEntries(properties.diff);
+    const sessionId = getFirstNonBlankString(properties.sessionID, properties.sessionId) ?? undefined;
+    return {
+      type: 'session_diff',
+      sessionId,
+      diffs
     };
   }
 
@@ -2165,7 +2556,7 @@ function parseEvent(rawEvent: unknown, expectedSessionId: string): AgentStreamEv
 
 function buildTaskMessageFromRawEvent(rawEvent: unknown, expectedSessionId: string): string | null {
   const event = asRecord(rawEvent);
-  const type = getFirstString(event.type);
+  const type = normalizeOpenCodeEventType(event.type);
   if (!type) return null;
 
   const properties = asRecord(event.properties);
@@ -2206,16 +2597,12 @@ function buildTaskMessageFromRawEvent(rawEvent: unknown, expectedSessionId: stri
   }
 
   if (type === 'session.diff') {
-    const diffs = Array.isArray(properties.diff) ? properties.diff : [];
+    const diffs = parseDiffEntries(properties.diff);
     if (diffs.length === 0) return 'diff updated';
     const summary = diffs
       .slice(0, 5)
       .map((item) => {
-        const record = asRecord(item);
-        const file = getFirstNonBlankString(record.file) ?? 'file';
-        const additions = getFirstNumber(record.additions) ?? 0;
-        const deletions = getFirstNumber(record.deletions) ?? 0;
-        return `${file} (+${additions}/-${deletions})`;
+        return `${item.file} (+${item.additions}/-${item.deletions})`;
       })
       .join(', ');
     return diffs.length > 5 ? `diff ${summary} ...` : `diff ${summary}`;
@@ -2726,11 +3113,13 @@ function emitFallbackFromFinalResponse(
     });
 
     if (status === 'completed' || status === 'error') {
+      const metadata = stringifyUnknown(state.metadata);
       onEvent({
         type: 'tool_result',
         toolCallId: parseToolId(part),
         output: status === 'error' ? stringifyUnknown(state.error) : stringifyUnknown(state.output),
-        isError: status === 'error'
+        isError: status === 'error',
+        metadata: metadata || undefined
       });
     }
   }
@@ -2748,11 +3137,33 @@ export async function runOpenCodeTurn(params: RunOpenCodeTurnParams): Promise<vo
   const requestedAgent = getFirstNonBlankString(params.agent);
 
   const toolNames = new Map<string, string>();
+  const toolInputs = new Map<string, string | undefined>();
+  const toolSnapshots = new Map<string, ToolFileSnapshot>();
   const toolPermissionContext = new Map<string, string>();
+  let promptUserMessageId: string | undefined;
+  let diffRawSessionEventCount = 0;
+  let diffEmittedSessionEventCount = 0;
+  let diffSessionFileCount = 0;
+  let diffMutatingToolCallCount = 0;
+  let diffMutatingToolResultCount = 0;
   const handleEvent = (event: AgentStreamEvent) => {
     let nextEvent = event;
 
     if (event.type === 'tool_call') {
+      toolInputs.set(event.toolCallId, event.input);
+      if (isDiffMutatingToolName(event.name)) {
+        diffMutatingToolCallCount += 1;
+        const snapshot = captureToolFileSnapshot(
+          params.workspaceRoot,
+          event.input,
+          log,
+          event.toolCallId,
+          event.name
+        );
+        if (snapshot) {
+          toolSnapshots.set(event.toolCallId, snapshot);
+        }
+      }
       toolPermissionContext.set(
         event.toolCallId,
         summarizeToolInputForPermission(event.name, event.input)
@@ -2778,7 +3189,10 @@ export async function runOpenCodeTurn(params: RunOpenCodeTurnParams): Promise<vo
       return;
     }
 
-    if (nextEvent.type === 'tool_call') {
+    if (nextEvent.type === 'message_updated' && nextEvent.role === 'user') {
+      promptUserMessageId = nextEvent.messageId;
+      log(`DiffDebug runtime user-message id=${nextEvent.messageId} session=${nextEvent.sessionId ?? sessionId}`);
+    } else if (nextEvent.type === 'tool_call') {
       toolNames.set(nextEvent.toolCallId, nextEvent.name);
       const input = nextEvent.input ? serializeForLog(nextEvent.input, 2000) : '';
       const line = input
@@ -2787,12 +3201,50 @@ export async function runOpenCodeTurn(params: RunOpenCodeTurnParams): Promise<vo
       logToolTrace(log, nextEvent.name, line);
     } else if (nextEvent.type === 'tool_result') {
       const name = toolNames.get(nextEvent.toolCallId) ?? nextEvent.toolCallId;
+      if (isDiffMutatingToolName(name)) {
+        diffMutatingToolResultCount += 1;
+      }
       const status = getToolResultStatusLabel(name, nextEvent.output, nextEvent.isError === true);
+      const snapshot = toolSnapshots.get(nextEvent.toolCallId);
+      if (snapshot && !nextEvent.isError) {
+        const snapshotDiff = buildDiffFromToolSnapshot(snapshot);
+        if (snapshotDiff) {
+          nextEvent = {
+            ...nextEvent,
+            metadata: mergeDiffIntoToolMetadata(nextEvent.metadata, snapshotDiff)
+          };
+          log(
+            `DiffDebug runtime snapshot-after tool=${name} id=${nextEvent.toolCallId} file=${compactLogValue(snapshotDiff.file, 300)} +${snapshotDiff.additions}/-${snapshotDiff.deletions}`
+          );
+        } else {
+          log(
+            `DiffDebug runtime snapshot-after tool=${name} id=${nextEvent.toolCallId} file=${compactLogValue(snapshot.file, 300)} unchanged`
+          );
+        }
+      }
+      logDiffToolPayload(
+        log,
+        name,
+        nextEvent.toolCallId,
+        toolInputs.get(nextEvent.toolCallId),
+        nextEvent.output,
+        status,
+        nextEvent.metadata
+      );
       const output = serializeForLog(nextEvent.output, 2000);
       const line = output
         ? `task:tool_result name=${name} id=${nextEvent.toolCallId} status=${status} output=${output}`
         : `task:tool_result name=${name} id=${nextEvent.toolCallId} status=${status}`;
       logToolTrace(log, name, line);
+    } else if (nextEvent.type === 'session_diff') {
+      diffEmittedSessionEventCount += 1;
+      diffSessionFileCount = nextEvent.diffs.length;
+      const totalAdditions = nextEvent.diffs.reduce((sum, item) => sum + item.additions, 0);
+      const totalDeletions = nextEvent.diffs.reduce((sum, item) => sum + item.deletions, 0);
+      const files = nextEvent.diffs.map((item) => `${item.file}(+${item.additions}/-${item.deletions})`).join(',') || '(none)';
+      log(
+        `DiffDebug runtime emit-session_diff session=${nextEvent.sessionId ?? sessionId} files=${nextEvent.diffs.length} totals=+${totalAdditions}/-${totalDeletions} filesDetail=${compactLogValue(files, 800)}`
+      );
     } else if (nextEvent.type === 'content') {
       // Skip per-token content logging to avoid noisy logs.
     } else if (nextEvent.type === 'error') {
@@ -2912,6 +3364,11 @@ export async function runOpenCodeTurn(params: RunOpenCodeTurnParams): Promise<vo
       }
 
       logRawEvent(raw, log);
+      const rawType = normalizeOpenCodeEventType(asRecord(raw).type);
+      if (rawType === 'session.diff') {
+        diffRawSessionEventCount += 1;
+        logSessionDiffRawEvent(raw, sessionId, log);
+      }
       captureContentPartKindFromRawEvent(raw, sessionId, contentPartKindById);
       const taskMessage = buildTaskMessageFromRawEvent(raw, sessionId);
       if (taskMessage) {
@@ -2937,6 +3394,9 @@ export async function runOpenCodeTurn(params: RunOpenCodeTurnParams): Promise<vo
 
       if (parsed.type === 'done' || parsed.type === 'error') {
         streamFinished = true;
+        log(
+          `DiffDebug runtime final rawSessionDiffEvents=${diffRawSessionEventCount} emittedSessionDiffEvents=${diffEmittedSessionEventCount} lastSessionDiffFiles=${diffSessionFileCount} mutatingToolCalls=${diffMutatingToolCallCount} mutatingToolResults=${diffMutatingToolResultCount} parsedEvents=${parsedEventCount}`
+        );
         break;
       }
     }
@@ -3075,6 +3535,22 @@ export async function runOpenCodeTurn(params: RunOpenCodeTurnParams): Promise<vo
       handleEvent({ type: 'error', error: emptyMessage });
       log(`prompt:response:empty ${serializeForLog(emptyMessage, 1000)}`);
       streamFinished = true;
+    }
+
+    const fetchedDiffs = await fetchSessionDiffEntries({
+      client: runtime.client,
+      workspaceRoot: params.workspaceRoot,
+      sessionId,
+      messageId: promptUserMessageId,
+      signal: params.signal,
+      log
+    });
+    if (fetchedDiffs.length > 0) {
+      handleEvent({
+        type: 'session_diff',
+        sessionId,
+        diffs: fetchedDiffs
+      });
     }
 
     if (!streamFinished) {

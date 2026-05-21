@@ -53,7 +53,14 @@
   let isAssistant = $derived(message.role === "assistant");
   let createdAtLabel = $derived(formatChatTime(message.createdAt));
   const HIDDEN_TOOL_NAMES = new Set(["search", "glob", "grep"]);
-  const EDIT_LIKE_TOOL_NAMES = new Set(["edit", "apply_patch"]);
+  const EDIT_LIKE_TOOL_NAMES = new Set([
+    "edit",
+    "multiedit",
+    "write",
+    "apply_patch",
+    "create",
+    "file_write",
+  ]);
 
   function parseHiddenToolName(step: AgentStep): string | null {
     if (step.kind !== "tool") return null;
@@ -210,6 +217,17 @@
     return trimmed.length > 0 ? trimmed : null;
   }
 
+  function asCount(value: unknown): number | undefined {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.max(0, Math.trunc(value));
+    }
+    if (typeof value === "string") {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isFinite(parsed)) return Math.max(0, parsed);
+    }
+    return undefined;
+  }
+
   function classifyLine(line: string): ChangedFileLine["kind"] {
     if (
       line.startsWith("@@ ") ||
@@ -346,6 +364,42 @@
     };
   }
 
+  function changedFileFromRuntime(
+    file: NonNullable<ChatItem["changedFiles"]>[number],
+  ): ChangedFile {
+    let additions = file.additions;
+    let deletions = file.deletions;
+    let lines: ChangedFileLine[] = [];
+    let detailsAvailable = false;
+    const patchText = file.patch?.trim() ?? "";
+
+    if (patchText) {
+      const parsedFiles = parsePatchTextIntoFiles(patchText);
+      const parsed =
+        parsedFiles.find((entry) => entry.file === file.file) ??
+        parsedFiles.find((entry) => entry.file.endsWith(`/${file.file}`)) ??
+        parsedFiles[0] ??
+        parsePatchTextForKnownFile(patchText, file.file);
+
+      if (parsed) {
+        lines = parsed.lines;
+        detailsAvailable = parsed.detailsAvailable;
+        if (additions + deletions === 0 && parsed.additions + parsed.deletions > 0) {
+          additions = parsed.additions;
+          deletions = parsed.deletions;
+        }
+      }
+    }
+
+    return {
+      file: file.file,
+      additions,
+      deletions,
+      lines,
+      detailsAvailable,
+    };
+  }
+
   function collectStringValues(value: unknown, out: string[], depth = 0): void {
     if (depth > 5) return;
     if (typeof value === "string") {
@@ -385,9 +439,166 @@
     return [...files];
   }
 
+  function changedFileFromPatch(path: string, patchText: string): ChangedFile {
+    const parsedFiles = parsePatchTextIntoFiles(patchText);
+    const parsed =
+      parsedFiles.find((entry) => entry.file === path) ??
+      parsedFiles.find((entry) => entry.file.endsWith(`/${path}`)) ??
+      parsedFiles[0] ??
+      parsePatchTextForKnownFile(patchText, path);
+    if (parsed) return { ...parsed, file: path };
+
+    const stats = { additions: 0, deletions: 0 };
+    for (const line of patchText.split("\n")) {
+      if (line.startsWith("+") && !line.startsWith("+++")) stats.additions += 1;
+      if (line.startsWith("-") && !line.startsWith("---")) stats.deletions += 1;
+    }
+    return {
+      file: path,
+      additions: stats.additions,
+      deletions: stats.deletions,
+      lines: [],
+      detailsAvailable: false,
+    };
+  }
+
+  function patchFromBeforeAfter(
+    path: string,
+    before: string,
+    after: string,
+  ): string {
+    const normalizedPath = path.replace(/\\/g, "/");
+    const beforeLines = before.replace(/\r\n/g, "\n").split("\n");
+    const afterLines = after.replace(/\r\n/g, "\n").split("\n");
+    if (beforeLines[beforeLines.length - 1] === "") beforeLines.pop();
+    if (afterLines[afterLines.length - 1] === "") afterLines.pop();
+
+    const header = [`--- a/${normalizedPath}`, `+++ b/${normalizedPath}`];
+    if (beforeLines.length * afterLines.length > 40000) {
+      return [
+        ...header,
+        ...beforeLines.map((line) => `-${line}`),
+        ...afterLines.map((line) => `+${line}`),
+      ].join("\n");
+    }
+
+    const dp = Array.from({ length: beforeLines.length + 1 }, () =>
+      Array<number>(afterLines.length + 1).fill(0),
+    );
+    for (let i = beforeLines.length - 1; i >= 0; i -= 1) {
+      for (let j = afterLines.length - 1; j >= 0; j -= 1) {
+        dp[i]![j] =
+          beforeLines[i] === afterLines[j]
+            ? dp[i + 1]![j + 1]! + 1
+            : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+      }
+    }
+
+    const lines = [...header];
+    let i = 0;
+    let j = 0;
+    while (i < beforeLines.length && j < afterLines.length) {
+      if (beforeLines[i] === afterLines[j]) {
+        lines.push(` ${beforeLines[i]}`);
+        i += 1;
+        j += 1;
+      } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+        lines.push(`-${beforeLines[i]}`);
+        i += 1;
+      } else {
+        lines.push(`+${afterLines[j]}`);
+        j += 1;
+      }
+    }
+    while (i < beforeLines.length) {
+      lines.push(`-${beforeLines[i]}`);
+      i += 1;
+    }
+    while (j < afterLines.length) {
+      lines.push(`+${afterLines[j]}`);
+      j += 1;
+    }
+    return lines.join("\n");
+  }
+
+  function patchFromRecordSnapshots(
+    path: string,
+    record: Record<string, unknown>,
+  ): string | null {
+    const before =
+      asNonBlankString(record.before) ??
+      asNonBlankString(record.old) ??
+      asNonBlankString(record.oldContent) ??
+      asNonBlankString(record.original);
+    const after =
+      asNonBlankString(record.after) ??
+      asNonBlankString(record.new) ??
+      asNonBlankString(record.newContent) ??
+      asNonBlankString(record.content);
+    if (before === null || after === null) return null;
+    return patchFromBeforeAfter(path, before, after);
+  }
+
+  function patchFromCreatedContent(path: string, content: string): string {
+    const normalizedPath = path.replace(/\\/g, "/");
+    const lines = content.replace(/\r\n/g, "\n").split("\n");
+    if (lines[lines.length - 1] === "") lines.pop();
+    return [
+      "--- /dev/null",
+      `+++ b/${normalizedPath}`,
+      `@@ -0,0 +1,${lines.length} @@`,
+      ...lines.map((line) => `+${line}`),
+    ].join("\n");
+  }
+
+  function upsertMetadataFiles(
+    files: unknown[],
+    upsertFile: (file: string, partial?: Partial<ChangedFile>) => void,
+  ): boolean {
+    let found = false;
+    for (const file of files) {
+      if (!file || typeof file !== "object") continue;
+      const record = file as Record<string, unknown>;
+      const path =
+        asNonBlankString(record.relativePath) ??
+        asNonBlankString(record.filePath) ??
+        asNonBlankString(record.file) ??
+        asNonBlankString(record.path);
+      if (!path) continue;
+
+      const patchText =
+        asNonBlankString(record.patch) ??
+        asNonBlankString(record.diff) ??
+        patchFromRecordSnapshots(path, record);
+      const fromPatch = patchText ? changedFileFromPatch(path, patchText) : null;
+      upsertFile(path, {
+        file: path,
+        additions:
+          asCount(record.additions) ??
+          asCount(record.insertions) ??
+          asCount(record.added) ??
+          fromPatch?.additions ??
+          0,
+        deletions:
+          asCount(record.deletions) ??
+          asCount(record.removed) ??
+          asCount(record.removals) ??
+          asCount(record.deleted) ??
+          asCount(record.deletes) ??
+          fromPatch?.deletions ??
+          0,
+        lines: fromPatch?.lines ?? [],
+        detailsAvailable: fromPatch?.detailsAvailable ?? false,
+      });
+      found = true;
+    }
+    return found;
+  }
+
   function buildChangedFilesSummary(
     steps: AgentStep[],
     assistantText: string,
+    runtimeChangedFiles: ChatItem["changedFiles"] = [],
   ): ChangedFilesSummary {
     const byFile = new Map<string, ChangedFile>();
     let sawMutatingTool = false;
@@ -404,42 +615,75 @@
         });
         return;
       }
-      existing.additions = partial?.additions ?? existing.additions;
-      existing.deletions = partial?.deletions ?? existing.deletions;
+      if (partial?.additions !== undefined || partial?.deletions !== undefined) {
+        const nextAdditions = partial.additions ?? existing.additions;
+        const nextDeletions = partial.deletions ?? existing.deletions;
+        const incomingTotal = nextAdditions + nextDeletions;
+        const existingTotal = existing.additions + existing.deletions;
+        if (incomingTotal > 0 || existingTotal === 0) {
+          existing.additions = nextAdditions;
+          existing.deletions = nextDeletions;
+        }
+      }
       if ((partial?.lines?.length ?? 0) > 0) {
         existing.lines = partial?.lines ?? existing.lines;
       }
-      existing.detailsAvailable =
-        partial?.detailsAvailable ?? existing.detailsAvailable;
+      if (partial?.detailsAvailable !== undefined) {
+        existing.detailsAvailable =
+          existing.detailsAvailable || partial.detailsAvailable;
+      }
     };
 
     for (const step of steps) {
       if (step.kind !== "tool") continue;
-      const toolName = step.toolName?.trim().toLowerCase() ?? "";
-      if (
-        toolName !== "apply_patch" &&
-        toolName !== "edit" &&
-        toolName !== "write"
-      )
+      const rawToolName = step.toolName?.trim().toLowerCase() ?? "";
+      const toolParts = rawToolName.split(/[.:/]/g);
+      const toolName = toolParts[toolParts.length - 1] ?? rawToolName;
+      if (!EDIT_LIKE_TOOL_NAMES.has(toolName))
         continue;
       sawMutatingTool = true;
 
       const rawInput = step.toolInput ?? "";
       const rawOutput = step.toolOutput ?? "";
+      const rawMetadata = step.toolMetadata ?? "";
       const input = parseRecord(rawInput);
       const output = parseRecord(rawOutput);
+      const metadata = parseRecord(rawMetadata);
       const allStrings: string[] = [];
       collectStringValues(input, allStrings);
       collectStringValues(output, allStrings);
+      collectStringValues(metadata, allStrings);
       collectStringValues(rawInput, allStrings);
       collectStringValues(rawOutput, allStrings);
+      collectStringValues(rawMetadata, allStrings);
 
       const directPath =
         asNonBlankString(input.filePath) ??
+        asNonBlankString(input.file_path) ??
         asNonBlankString(input.path) ??
         asNonBlankString(output.filePath) ??
+        asNonBlankString(output.file_path) ??
         asNonBlankString(output.path);
-      if (directPath) upsertFile(directPath);
+
+      const metadataFiles = Array.isArray(metadata.files)
+        ? metadata.files
+        : [];
+      let foundMetadata = upsertMetadataFiles(metadataFiles, upsertFile);
+
+      if (!foundMetadata && metadata.filediff && typeof metadata.filediff === "object") {
+        foundMetadata = upsertMetadataFiles([metadata.filediff], upsertFile);
+      }
+
+      if (!foundMetadata && Array.isArray(metadata.results)) {
+        const resultFileDiffs = metadata.results
+          .map((result) =>
+            result && typeof result === "object"
+              ? (result as Record<string, unknown>).filediff
+              : null,
+          )
+          .filter((filediff) => filediff && typeof filediff === "object");
+        foundMetadata = upsertMetadataFiles(resultFileDiffs, upsertFile);
+      }
 
       const patchCandidates = extractPatchCandidates(allStrings);
       for (const rawPatchText of patchCandidates) {
@@ -461,6 +705,57 @@
           }
         }
       }
+
+      if (
+        directPath &&
+        !foundMetadata &&
+        asNonBlankString(input.oldString) &&
+        asNonBlankString(input.newString)
+      ) {
+        const patchText = patchFromBeforeAfter(
+          directPath,
+          input.oldString as string,
+          input.newString as string,
+        );
+        upsertFile(directPath, changedFileFromPatch(directPath, patchText));
+        foundMetadata = true;
+      }
+
+      if (
+        directPath &&
+        !foundMetadata &&
+        asNonBlankString(input.before) &&
+        asNonBlankString(input.after)
+      ) {
+        const patchText = patchFromBeforeAfter(
+          directPath,
+          input.before as string,
+          input.after as string,
+        );
+        upsertFile(directPath, changedFileFromPatch(directPath, patchText));
+        foundMetadata = true;
+      }
+
+      if (
+        directPath &&
+        !foundMetadata &&
+        (toolName === "write" || toolName === "create" || toolName === "file_write") &&
+        asNonBlankString(input.content)
+      ) {
+        const patchText = patchFromCreatedContent(directPath, input.content as string);
+        upsertFile(directPath, changedFileFromPatch(directPath, patchText));
+        foundMetadata = true;
+      }
+
+      if (directPath && !foundMetadata) {
+        upsertFile(directPath);
+      }
+    }
+
+    for (const file of runtimeChangedFiles ?? []) {
+      if (!file.file.trim()) continue;
+      const parsed = changedFileFromRuntime(file);
+      upsertFile(parsed.file, parsed);
     }
 
     if (byFile.size === 0 && sawMutatingTool) {
@@ -482,7 +777,11 @@
 
   let changedFilesSummary = $derived.by(() =>
     isAssistant
-      ? buildChangedFilesSummary(rawActivitySteps, message.content)
+      ? buildChangedFilesSummary(
+          rawActivitySteps,
+          message.content,
+          message.changedFiles,
+        )
       : null,
   );
   let userAttachments = $derived(isUser ? (message.attachments ?? []) : []);

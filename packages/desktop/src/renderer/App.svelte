@@ -2219,6 +2219,48 @@
     setMessagesForWorkspaceRoot(workspaceRoot, next);
   }
 
+  function updateMessageChangedFilesById(
+    workspaceRoot: string,
+    messageId: string,
+    changedFiles: NonNullable<ChatItem["changedFiles"]>,
+  ): void {
+    const current = getMessagesForWorkspaceRoot(workspaceRoot);
+    const index = current.findIndex((item) => item.id === messageId);
+    if (index === -1) {
+      console.warn("[DiffDebug] renderer could not store session_diff", {
+        workspaceRoot,
+        messageId,
+        files: changedFiles.length,
+      });
+      return;
+    }
+
+    const next = [...current];
+    next[index] = {
+      ...next[index],
+      changedFiles,
+    };
+    const totalAdditions = changedFiles.reduce(
+      (sum, file) => sum + file.additions,
+      0,
+    );
+    const totalDeletions = changedFiles.reduce(
+      (sum, file) => sum + file.deletions,
+      0,
+    );
+    console.info("[DiffDebug] renderer stored session_diff", {
+      workspaceRoot,
+      messageId,
+      files: changedFiles.length,
+      totalAdditions,
+      totalDeletions,
+      fileDetails: changedFiles.map(
+        (file) => `${file.file}(+${file.additions}/-${file.deletions})`,
+      ),
+    });
+    setMessagesForWorkspaceRoot(workspaceRoot, next);
+  }
+
   function renameMessageIdInWorkspace(
     workspaceRoot: string,
     previousMessageId: string,
@@ -2647,6 +2689,20 @@
       });
       setSyncStateForWorkspaceRoot(turnWorkspaceRoot, nextSyncState);
 
+      if (streamEvent.type === "session_diff") {
+        console.info("[DiffDebug] renderer received session_diff", {
+          sessionId: streamEvent.sessionId,
+          files: streamEvent.diffs.length,
+          assistantMessageId,
+        });
+        updateMessageChangedFilesById(
+          turnWorkspaceRoot,
+          assistantMessageId,
+          streamEvent.diffs,
+        );
+        return;
+      }
+
       if (streamEvent.type === "content") {
         if (
           streamEvent.partId &&
@@ -2732,6 +2788,7 @@
           toolName,
           detail,
           toolOutput: streamEvent.output,
+          toolMetadata: streamEvent.metadata,
           status,
           kind: "tool",
           contentStart: completion.length,

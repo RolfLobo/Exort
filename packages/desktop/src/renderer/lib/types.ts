@@ -69,6 +69,7 @@ export type AgentStep = {
   detail?: string;
   toolInput?: string;
   toolOutput?: string;
+  toolMetadata?: string;
   status: 'running' | 'ok' | 'error';
   kind: 'tool' | 'task' | 'status' | 'error' | 'permission' | 'question';
   requestId?: string;
@@ -85,6 +86,13 @@ export type AgentStep = {
   contentStart?: number;
   contentEnd?: number;
   createdAt: string;
+};
+
+export type AgentChangedFile = {
+  file: string;
+  additions: number;
+  deletions: number;
+  patch?: string;
 };
 
 export type ChatItem = {
@@ -113,6 +121,7 @@ export type ChatItem = {
       }
   >;
   steps?: AgentStep[];
+  changedFiles?: AgentChangedFile[];
 };
 
 export type OpenCodeTokenBreakdown = {

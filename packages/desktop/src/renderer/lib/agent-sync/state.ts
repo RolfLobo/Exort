@@ -348,6 +348,7 @@ export function applyRuntimeEventToSyncState(params: {
       type: "tool",
       toolCallId: event.toolCallId,
       output: event.output,
+      metadata: event.metadata,
       status: event.isError ? "error" : "ok",
     });
     next.session_status[sessionId] = { type: "running" };

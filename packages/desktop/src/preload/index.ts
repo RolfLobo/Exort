@@ -12,10 +12,18 @@ type OpenCodeTokenBreakdown = {
 
 type OpenCodeTokenUsage = number | OpenCodeTokenBreakdown;
 
+type AgentDiffEntry = {
+  file: string;
+  additions: number;
+  deletions: number;
+  patch?: string;
+};
+
 type AgentStreamEvent =
   | { type: 'content'; content: string; partId?: string; contentKind?: 'reasoning' | 'text' }
   | { type: 'tool_call'; toolCallId: string; name: string; input?: string }
-  | { type: 'tool_result'; toolCallId: string; output: string; isError?: boolean }
+  | { type: 'tool_result'; toolCallId: string; output: string; isError?: boolean; metadata?: string }
+  | { type: 'session_diff'; sessionId?: string; diffs: AgentDiffEntry[] }
   | {
       type: 'session_status';
       statusType: string;
