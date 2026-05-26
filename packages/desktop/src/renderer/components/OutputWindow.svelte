@@ -3,7 +3,9 @@
     AlertTriangle,
     ChevronDown,
     ChevronUp,
+    FileOutput,
     Hammer,
+    Lightbulb,
     Terminal,
     Upload,
   } from "lucide-svelte";
@@ -119,17 +121,18 @@
           {/if}
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 hover:text-dark-fg1">
           {#if run?.status === "error"}
             <button
               type="button"
-              class="inline-flex h-7 items-center gap-1.5 rounded border border-dark-red/40 bg-dark-red/10 px-2 text-[11px] font-medium text-dark-red transition-colors hover:border-dark-red hover:bg-dark-red/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              class="inline-flex h-7 items-center gap-1.5 rounded px-2 text-[11px] font-medium text-dark-fg3
+              transition-colors hover:text-dark-fg1"
               onclick={() => onAddErrorToChat(run)}
               title="Add output error to chat"
               aria-label="Add output error to chat"
             >
-              <AlertTriangle class="h-3.5 w-3.5" />
-              <span>Add to chat</span>
+              <FileOutput class="h-3.5 w-3.5 text-current" />
+              <span>Add to context</span>
             </button>
           {/if}
 
