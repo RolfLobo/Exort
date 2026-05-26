@@ -72,6 +72,7 @@
     ChatAttachment,
     ChatItem,
     ChatSendPayload,
+    PendingOutputErrorContext,
     OpenFile,
     OpenCodeModelCatalogProvider,
     OpenCodeTokenUsage,
@@ -89,6 +90,9 @@
   const UPDATE_DOWNLOADING_TOAST_ID = "update-downloading";
   const UPDATE_DOWNLOADED_TOAST_ID = "update-downloaded";
   const UPDATE_ERROR_TOAST_ID = "update-error";
+  const OUTPUT_ERROR_STDERR_TAIL_CHARS = 1800;
+  const OUTPUT_ERROR_ATTACHMENT_MIME =
+    "application/x-exort-output-error-context";
   type SettingsTab = "general" | "requirements" | "providers" | "boards";
   type WorkspaceContextLimits = {
     contextLimit: number;
@@ -160,6 +164,9 @@
   let workspaceMessagesByRoot = $state<Record<string, ChatItem[]>>({});
   let workspaceContextLimitsByRoot = $state<Record<string, WorkspaceContextLimits>>({});
   let workspaceContextUsageByRoot = $state<Record<string, WorkspaceContextUsage>>({});
+  let pendingOutputErrorContextByRoot = $state<
+    Record<string, PendingOutputErrorContext | null>
+  >({});
   let workspaceSyncStateByRoot = $state<Record<string, AgentSyncState>>({});
   let historyLoadedSessionKeyByRoot = $state<Record<string, string>>({});
   let historyLoadInFlightByRoot = $state<Record<string, number>>({});
@@ -317,6 +324,10 @@
           0,
       }
     );
+  });
+  let activePendingOutputErrorContext = $derived.by(() => {
+    if (!activeWorkspace) return null;
+    return pendingOutputErrorContextByRoot[activeWorkspace.rootPath] ?? null;
   });
 
   function sumTokenUsage(tokens: OpenCodeTokenUsage | undefined): number {
@@ -1339,6 +1350,12 @@
     delete nextWorkspaceMessagesByRoot[workspace.rootPath];
     workspaceMessagesByRoot = nextWorkspaceMessagesByRoot;
 
+    const nextPendingOutputErrorContextByRoot = {
+      ...pendingOutputErrorContextByRoot,
+    };
+    delete nextPendingOutputErrorContextByRoot[workspace.rootPath];
+    pendingOutputErrorContextByRoot = nextPendingOutputErrorContextByRoot;
+
     const nextWorkspaceSyncStateByRoot = { ...workspaceSyncStateByRoot };
     delete nextWorkspaceSyncStateByRoot[workspace.rootPath];
     workspaceSyncStateByRoot = nextWorkspaceSyncStateByRoot;
@@ -2105,6 +2122,64 @@
     outputExpanded = nextExpanded;
   }
 
+  function setPendingOutputErrorContextForWorkspaceRoot(
+    workspaceRoot: string,
+    context: PendingOutputErrorContext | null,
+  ): void {
+    pendingOutputErrorContextByRoot = {
+      ...pendingOutputErrorContextByRoot,
+      [workspaceRoot]: context,
+    };
+  }
+
+  function buildPendingOutputErrorContext(
+    run: ArduinoOutputRun,
+  ): PendingOutputErrorContext | null {
+    if (run.status !== "error") return null;
+
+    const messageText = run.message?.trim() ?? "";
+    const stderrText = run.logs
+      .filter((entry) => entry.stream === "stderr")
+      .map((entry) => entry.chunk)
+      .join("")
+      .trim();
+    const stderrTail =
+      stderrText.length > OUTPUT_ERROR_STDERR_TAIL_CHARS
+        ? stderrText.slice(-OUTPUT_ERROR_STDERR_TAIL_CHARS)
+        : stderrText;
+
+    const payloadParts: string[] = [];
+    if (messageText) {
+      payloadParts.push(`Message:\n${messageText}`);
+    }
+    if (stderrTail) {
+      payloadParts.push(`Stderr tail:\n${stderrTail}`);
+    }
+
+    const text = payloadParts.join("\n\n").trim();
+    if (!text) return null;
+
+    return {
+      id: crypto.randomUUID(),
+      label: "Compile Error",
+      operation: run.operation,
+      status: run.status,
+      text,
+    };
+  }
+
+  function handleAddOutputErrorToChat(run: ArduinoOutputRun): void {
+    if (!activeWorkspace) return;
+    const context = buildPendingOutputErrorContext(run);
+    if (!context) return;
+    setPendingOutputErrorContextForWorkspaceRoot(activeWorkspace.rootPath, context);
+  }
+
+  function handleDismissPendingOutputErrorContext(): void {
+    if (!activeWorkspace) return;
+    setPendingOutputErrorContextForWorkspaceRoot(activeWorkspace.rootPath, null);
+  }
+
   function getHotkeyContext() {
     return {
       settingsModalOpen,
@@ -2637,6 +2712,9 @@
 
     const prompt = payload.prompt.trim();
     const attachments = payload.attachments;
+    const modelAttachments = attachments.filter(
+      (attachment) => attachment.mime !== OUTPUT_ERROR_ATTACHMENT_MIME,
+    );
     const turnAgent = payload.mode;
     const turnWorkspaceRoot = activeWorkspace.rootPath;
     const turnWorkspaceId = activeWorkspace.id;
@@ -3012,16 +3090,19 @@
     window.electronAPI.onAgentLog(logListener);
 
     try {
-      const run = await window.electronAPI.startAgentTurn({
+      const agentTurnPayload = {
         requestId,
         workspaceRoot: activeWorkspace.rootPath,
         prompt,
-        attachments,
+        attachments: modelAttachments,
         sessionId: turnSessionId ?? undefined,
         agent: turnAgent,
         variant: turnVariant,
         model: turnModelOverride,
-      });
+      };
+      console.info("[App] startAgentTurn payload", agentTurnPayload);
+
+      const run = await window.electronAPI.startAgentTurn(agentTurnPayload);
 
       if (!run.ok) {
         throw new Error(run.error ?? "Agent runtime failed");
@@ -3185,6 +3266,8 @@
             onQuestionReply={handleQuestionReply}
             onQuestionReject={handleQuestionReject}
             onOpenFile={openFile}
+            pendingOutputErrorContext={activePendingOutputErrorContext}
+            onDismissPendingOutputErrorContext={handleDismissPendingOutputErrorContext}
           />
         </div>
       {/if}
@@ -3246,6 +3329,7 @@
         run={outputRun}
         heightPct={OUTPUT_WINDOW_HEIGHT_PCT}
         onToggle={handleOutputWindowToggle}
+        onAddErrorToChat={handleAddOutputErrorToChat}
       />
     </div>
     </div>

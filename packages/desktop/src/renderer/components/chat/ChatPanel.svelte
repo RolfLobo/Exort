@@ -3,6 +3,7 @@
   import type {
     AgentPermissionReply,
     ChatItem,
+    PendingOutputErrorContext,
     ChatSendPayload,
   } from "../../lib/types";
   import type { ChatFontSizePreset } from "../../lib/state/types";
@@ -48,6 +49,8 @@
     onQuestionReply,
     onQuestionReject,
     onOpenFile,
+    pendingOutputErrorContext = null,
+    onDismissPendingOutputErrorContext = () => {},
   } =
     $props<{
       messages: ChatItem[];
@@ -73,6 +76,8 @@
       onQuestionReply: (requestId: string, answers: string[][]) => Promise<void> | void;
       onQuestionReject: (requestId: string) => Promise<void> | void;
       onOpenFile?: (filePath: string) => Promise<void> | void;
+      pendingOutputErrorContext?: PendingOutputErrorContext | null;
+      onDismissPendingOutputErrorContext?: () => void;
     }>();
 
   function normalizePathSeparators(value: string): string {
@@ -248,6 +253,8 @@
       {onStop}
       {agentMode}
       {onAgentModeChange}
+      {pendingOutputErrorContext}
+      {onDismissPendingOutputErrorContext}
     />
   {:else if bootstrapping}
     <HistoryLoading />

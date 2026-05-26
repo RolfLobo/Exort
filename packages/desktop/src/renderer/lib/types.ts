@@ -26,6 +26,14 @@ export type ChatSendPayload = {
   mode: "build" | "plan";
 };
 
+export type PendingOutputErrorContext = {
+  id: string;
+  label: string;
+  operation: ArduinoOperation;
+  status: ArduinoOutputRunStatus;
+  text: string;
+};
+
 export type AgentQuestionOption = {
   label: string;
   description: string;

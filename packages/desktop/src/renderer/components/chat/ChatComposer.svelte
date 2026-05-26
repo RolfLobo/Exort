@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import {
+    AlertTriangle,
     ArrowUp,
     FileText,
     Plus,
@@ -19,6 +20,7 @@
   import type { ThinkingLevel } from "../../lib/state/types";
   import type {
     ChatAttachment,
+    PendingOutputErrorContext,
     ChatSendPayload,
     OpenCodeModelCatalogProvider,
     SelectedModelRef,
@@ -35,6 +37,8 @@
     stopping,
     agentMode,
     onAgentModeChange,
+    pendingOutputErrorContext = null,
+    onDismissPendingOutputErrorContext = () => {},
     onSend,
     onStop,
   } = $props<{
@@ -43,12 +47,16 @@
     stopping: boolean;
     agentMode: "build" | "plan";
     onAgentModeChange: (mode: "build" | "plan") => void;
+    pendingOutputErrorContext?: PendingOutputErrorContext | null;
+    onDismissPendingOutputErrorContext?: () => void;
     onSend: (payload: ChatSendPayload) => Promise<void> | void;
     onStop: () => Promise<void> | void;
   }>();
 
   const MAX_PROMPT_CHARS = 12000;
   const ATTACHMENT_ONLY_PROMPT = "Please review the attached file.";
+  const OUTPUT_ERROR_ATTACHMENT_MIME =
+    "application/x-exort-output-error-context";
   const THINKING_LEVEL_OPTIONS: Array<{
     value: ThinkingLevel;
     label: string;
@@ -95,13 +103,20 @@
   let dragDepth = 0;
 
   let canSend = $derived(
-    !busy && (prompt.trim().length > 0 || attachments.length > 0),
+    !busy &&
+      (prompt.trim().length > 0 ||
+        attachments.length > 0 ||
+        pendingOutputErrorContext !== null),
   );
   let selectedModelEntry = $derived.by(() =>
     findSelectedModel(catalogProviders, selectedModel),
   );
   let selectedModelLabel = $derived.by(() => {
-    return selectedModelEntry?.model.name ?? selectedModel?.modelId ?? "No model selected";
+    return (
+      selectedModelEntry?.model.name ??
+      selectedModel?.modelId ??
+      "No model selected"
+    );
   });
   let selectedModelVariants = $derived.by(() => {
     return new Set(selectedModelEntry?.model.variants ?? []);
@@ -274,17 +289,61 @@
     }));
   }
 
+  function summarizeOutputError(text: string): string {
+    return text.replace(/\s+/g, " ").trim();
+  }
+
+  function buildOutputErrorPromptBlock(
+    context: PendingOutputErrorContext | null,
+  ): string {
+    if (!context) return "";
+
+    const normalized = context.text.trim();
+    if (!normalized) return "";
+    return `Output error context:\n${normalized}`;
+  }
+
+  function buildOutputErrorUiAttachment(
+    context: PendingOutputErrorContext | null,
+    outputErrorBlock: string,
+  ): ChatAttachment | null {
+    if (!context || !outputErrorBlock) return null;
+    return {
+      id: `output-error-${context.id}`,
+      name: context.label,
+      path: `exort-output-error://${context.id}`,
+      mime: OUTPUT_ERROR_ATTACHMENT_MIME,
+      size: outputErrorBlock.length,
+      url: summarizeOutputError(context.text),
+    };
+  }
+
   function submit(): void {
     const text = prompt.trim();
-    if (busy || (!text && attachments.length === 0)) return;
+    const outputErrorBlock = buildOutputErrorPromptBlock(
+      pendingOutputErrorContext,
+    );
+    if (busy || (!text && attachments.length === 0 && !outputErrorBlock))
+      return;
 
     const previousPrompt = prompt;
     const previousAttachments = attachments;
+    const hasPendingOutputErrorContext = pendingOutputErrorContext !== null;
+    const combinedPrompt = [text, outputErrorBlock]
+      .filter((part) => part.length > 0)
+      .join("\n\n");
+    const outputErrorAttachment = buildOutputErrorUiAttachment(
+      pendingOutputErrorContext,
+      outputErrorBlock,
+    );
     const payload: ChatSendPayload = {
-      prompt: text || ATTACHMENT_ONLY_PROMPT,
-      attachments: toSendAttachments(),
+      prompt: combinedPrompt || ATTACHMENT_ONLY_PROMPT,
+      attachments: outputErrorAttachment
+        ? [...toSendAttachments(), outputErrorAttachment]
+        : toSendAttachments(),
       mode: agentMode,
     };
+    console.info("[ChatComposer]", payload.prompt);
 
     prompt = "";
     clearSentAttachments();
@@ -292,6 +351,9 @@
 
     void Promise.resolve(onSend(payload))
       .then(() => {
+        if (hasPendingOutputErrorContext) {
+          onDismissPendingOutputErrorContext();
+        }
         // Cleared optimistically on submit.
       })
       .catch((error) => {
@@ -510,8 +572,39 @@
       aria-label="Attach files"
     />
 
-    {#if attachments.length > 0}
+    {#if attachments.length > 0 || pendingOutputErrorContext}
       <div class="mb-2 flex flex-wrap gap-2">
+        {#if pendingOutputErrorContext}
+          <div
+            class="group inline-flex max-w-full items-center gap-2 rounded-md border border-dark-red/40 bg-dark-red/10 px-2 py-1 text-xs text-dark-fg2"
+            title={pendingOutputErrorContext.text}
+          >
+            <span
+              class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded bg-dark-red/20 text-dark-red"
+              aria-hidden="true"
+            >
+              <AlertTriangle class="h-4 w-4" />
+            </span>
+            <span class="min-w-0">
+              <span class="block max-w-44 truncate text-dark-fg1">
+                {pendingOutputErrorContext.label}
+              </span>
+              <span class="block max-w-56 truncate text-[10px] text-dark-fg4">
+                {summarizeOutputError(pendingOutputErrorContext.text)}
+              </span>
+            </span>
+            <button
+              type="button"
+              class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-dark-fg3 transition-colors hover:bg-dark-bg1 hover:text-dark-fg1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              onclick={() => onDismissPendingOutputErrorContext()}
+              aria-label="Remove output error context"
+              title="Remove"
+            >
+              <X class="h-3.5 w-3.5" />
+            </button>
+          </div>
+        {/if}
+
         {#each attachments as attachment (attachment.id)}
           <div
             class="group inline-flex max-w-full items-center gap-2 rounded-md border border-dark-border bg-dark-bg px-2 py-1 text-xs text-dark-fg2"

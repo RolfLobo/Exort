@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    AlertTriangle,
     ChevronDown,
     ChevronUp,
     Hammer,
@@ -13,11 +14,13 @@
     run = null,
     heightPct = 20,
     onToggle = () => {},
+    onAddErrorToChat = () => {},
   } = $props<{
     expanded: boolean;
     run: ArduinoOutputRun | null;
     heightPct: number;
     onToggle: (nextExpanded: boolean) => void;
+    onAddErrorToChat?: (run: ArduinoOutputRun) => void;
   }>();
 
   let outputContainerEl = $state<HTMLDivElement | null>(null);
@@ -117,6 +120,19 @@
         </div>
 
         <div class="flex items-center gap-2">
+          {#if run?.status === "error"}
+            <button
+              type="button"
+              class="inline-flex h-7 items-center gap-1.5 rounded border border-dark-red/40 bg-dark-red/10 px-2 text-[11px] font-medium text-dark-red transition-colors hover:border-dark-red hover:bg-dark-red/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              onclick={() => onAddErrorToChat(run)}
+              title="Add output error to chat"
+              aria-label="Add output error to chat"
+            >
+              <AlertTriangle class="h-3.5 w-3.5" />
+              <span>Add to chat</span>
+            </button>
+          {/if}
+
           <div
             class="relative h-2.5 w-28 overflow-hidden rounded-full border border-dark-border bg-dark-bg"
             title={`${operationLabel} progress`}

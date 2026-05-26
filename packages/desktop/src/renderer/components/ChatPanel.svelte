@@ -2,6 +2,7 @@
   import type {
     AgentPermissionReply,
     ChatItem,
+    PendingOutputErrorContext,
     ChatSendPayload,
   } from "../lib/types";
   import type { ChatFontSizePreset } from "../lib/state/types";
@@ -27,11 +28,22 @@
     stopping: boolean;
     sessionStatus: "running" | "idle" | "error";
     onSend: (payload: ChatSendPayload) => void;
+    agentMode?: "build" | "plan";
+    onAgentModeChange?: (mode: "build" | "plan") => void;
     onStop: () => Promise<void> | void;
     onNewSession: () => void;
     onOpenWorkspace: () => Promise<void> | void;
     onCollapse?: () => Promise<void> | void;
     newSessionDisabled: boolean;
+    bootstrapping?: boolean;
+    historyLoading?: boolean;
+    pendingOutputErrorContext?: PendingOutputErrorContext | null;
+    onDismissPendingOutputErrorContext?: () => void;
+    onOpenFile?: (filePath: string) => Promise<void> | void;
+    onUndoChangedFiles?: (
+      files: string[],
+      messageId: string,
+    ) => Promise<void> | void;
     onPermissionReply: (
       requestId: string,
       reply: AgentPermissionReply,

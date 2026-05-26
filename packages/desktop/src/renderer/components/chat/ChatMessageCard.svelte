@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { Copy, CopyCheck, FileText } from "lucide-svelte";
+  import { AlertTriangle, Copy, CopyCheck, FileText } from "lucide-svelte";
 
   import type {
     AgentPermissionReply,
@@ -53,6 +53,8 @@
   let isAssistant = $derived(message.role === "assistant");
   let createdAtLabel = $derived(formatChatTime(message.createdAt));
   const HIDDEN_TOOL_NAMES = new Set(["search", "glob", "grep"]);
+  const OUTPUT_ERROR_ATTACHMENT_MIME =
+    "application/x-exort-output-error-context";
   const EDIT_LIKE_TOOL_NAMES = new Set([
     "edit",
     "multiedit",
@@ -785,6 +787,16 @@
       : null,
   );
   let userAttachments = $derived(isUser ? (message.attachments ?? []) : []);
+  let outputErrorAttachments = $derived.by(() =>
+    userAttachments.filter(
+      (attachment) => attachment.mime === OUTPUT_ERROR_ATTACHMENT_MIME,
+    ),
+  );
+  let regularUserAttachments = $derived.by(() =>
+    userAttachments.filter(
+      (attachment) => attachment.mime !== OUTPUT_ERROR_ATTACHMENT_MIME,
+    ),
+  );
   let structuredAssistantContentParts = $derived(
     isAssistant
       ? (message.assistantContentParts ?? []).filter(
@@ -901,6 +913,29 @@
     return fileUrl(attachment.path);
   }
 
+  function stripOutputErrorContextBlock(content: string): string {
+    const trimmed = content.trimEnd();
+    const inlineMarker = "\n\nOutput error context:\n";
+    const inlineIndex = trimmed.lastIndexOf(inlineMarker);
+    if (inlineIndex >= 0) {
+      return trimmed.slice(0, inlineIndex).trimEnd();
+    }
+
+    const blockOnlyMarker = "Output error context:\n";
+    if (trimmed.startsWith(blockOnlyMarker)) {
+      return "";
+    }
+
+    return content;
+  }
+
+  let userVisibleContent = $derived.by(() => {
+    if (!isUser) return message.content;
+    if (outputErrorAttachments.length === 0) return message.content;
+    return stripOutputErrorContextBlock(message.content);
+  });
+  let shouldRenderUserBubble = $derived.by(() => userVisibleContent.trim().length > 0);
+
   $effect(() => {
     if (lastMessageId === message.id) return;
     lastMessageId = message.id;
@@ -1008,9 +1043,35 @@
   {/if}
 
   {#if isUser}
-    {#if userAttachments.length > 0}
+    {#if outputErrorAttachments.length > 0}
       <div class="flex max-w-full flex-wrap justify-end gap-2 self-end">
-        {#each userAttachments as attachment (attachment.id)}
+        {#each outputErrorAttachments as attachment (attachment.id)}
+          <div
+            class="group inline-flex max-w-full items-center gap-2 rounded-md border border-dark-red/40 bg-dark-red/10 px-2 py-1 text-xs text-dark-fg2"
+            title={attachment.url ?? "Output error context attached"}
+          >
+            <span
+              class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded bg-dark-red/20 text-dark-red"
+              aria-hidden="true"
+            >
+              <AlertTriangle class="h-4 w-4" />
+            </span>
+            <span class="min-w-0">
+              <span class="block max-w-44 truncate text-dark-fg1">
+                {attachment.name}
+              </span>
+              <span class="block max-w-56 truncate text-[10px] text-dark-fg4">
+                {attachment.url ?? "Output error context attached"}
+              </span>
+            </span>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    {#if regularUserAttachments.length > 0}
+      <div class="flex max-w-full flex-wrap justify-end gap-2 self-end">
+        {#each regularUserAttachments as attachment (attachment.id)}
           <div
             class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-dark-border bg-dark-bgS p-1 text-dark-fg3"
             title={attachment.name}
@@ -1035,11 +1096,13 @@
       </div>
     {/if}
 
-    <p
-      class="max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-2xl bg-dark-bg1 px-4 py-2 text-sm font-thin leading-1 text-dark-fg0"
-    >
-      {message.content}
-    </p>
+    {#if shouldRenderUserBubble}
+      <p
+        class="max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-2xl bg-dark-bg1 px-4 py-2 text-sm font-thin leading-1 text-dark-fg0"
+      >
+        {userVisibleContent}
+      </p>
+    {/if}
   {/if}
   {#if isUser}
     <button
