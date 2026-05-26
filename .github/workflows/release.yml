@@ -50,8 +50,24 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-  build-windows:
+  create-release:
     needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create draft GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: Exort ${{ needs.validate.outputs.tag }}
+          draft: true
+          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
+          generate_release_notes: true
+          overwrite_files: true
+
+  build-windows:
+    needs:
+      - validate
+      - create-release
     runs-on: windows-latest
     env:
       GYP_MSVS_VERSION: 2022
@@ -95,18 +111,21 @@ jobs:
       - name: Package desktop release artifacts
         run: npm --workspace @exort/desktop run package
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload Windows assets to release
+        uses: softprops/action-gh-release@v2
         with:
-          name: exort-windows-x64
-          path: |
+          tag_name: ${{ needs.validate.outputs.tag }}
+          draft: true
+          overwrite_files: true
+          files: |
             packages/desktop/release/*.exe
             packages/desktop/release/*.blockmap
             packages/desktop/release/latest*.yml
-          if-no-files-found: error
 
   build-macos-arm64:
-    needs: validate
+    needs:
+      - validate
+      - create-release
     runs-on: macos-latest
     steps:
       - name: Check out repository
@@ -223,15 +242,16 @@ jobs:
           spctl --assess --type execute --verbose "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload macOS arm64 assets to release
+        uses: softprops/action-gh-release@v2
         with:
-          name: exort-macos-arm64
-          path: |
+          tag_name: ${{ needs.validate.outputs.tag }}
+          draft: true
+          overwrite_files: true
+          files: |
             packages/desktop/release/*-mac-arm64.dmg
             packages/desktop/release/*-mac-arm64.zip
             packages/desktop/release/*-mac-arm64.zip.blockmap
-          if-no-files-found: error
 
       - name: Upload per-arch latest-mac.yml for merge
         uses: actions/upload-artifact@v4
@@ -242,7 +262,9 @@ jobs:
           retention-days: 1
 
   build-macos-x64:
-    needs: validate
+    needs:
+      - validate
+      - create-release
     runs-on: macos-15-intel
     steps:
       - name: Check out repository
@@ -359,15 +381,16 @@ jobs:
           spctl --assess --type execute --verbose "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload macOS x64 assets to release
+        uses: softprops/action-gh-release@v2
         with:
-          name: exort-macos-x64
-          path: |
+          tag_name: ${{ needs.validate.outputs.tag }}
+          draft: true
+          overwrite_files: true
+          files: |
             packages/desktop/release/*-mac-x64.dmg
             packages/desktop/release/*-mac-x64.zip
             packages/desktop/release/*-mac-x64.zip.blockmap
-          if-no-files-found: error
 
       - name: Upload per-arch latest-mac.yml for merge
         uses: actions/upload-artifact@v4
@@ -378,7 +401,9 @@ jobs:
           retention-days: 1
 
   build-linux:
-    needs: validate
+    needs:
+      - validate
+      - create-release
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -410,19 +435,21 @@ jobs:
       - name: Package desktop release artifacts
         run: npm --workspace @exort/desktop run package
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload Linux assets to release
+        uses: softprops/action-gh-release@v2
         with:
-          name: exort-linux-x64
-          path: |
+          tag_name: ${{ needs.validate.outputs.tag }}
+          draft: true
+          overwrite_files: true
+          files: |
             packages/desktop/release/*.AppImage
             packages/desktop/release/*.AppImage.zsync
             packages/desktop/release/latest-linux*.yml
-          if-no-files-found: error
 
   combine-macos-manifest:
     needs:
       - validate
+      - create-release
       - build-macos-arm64
       - build-macos-x64
     runs-on: ubuntu-latest
@@ -441,56 +468,10 @@ jobs:
           LATEST_YML_DIR: ${{ github.workspace }}/mac-manifests
         run: node packages/desktop/scripts/finalize-latest-mac-yml.mjs
 
-      - name: Upload merged latest-mac.yml artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: exort-macos-latest-manifest
-          path: ${{ runner.temp }}/latest-mac.yml
-          if-no-files-found: error
-
-  release:
-    needs:
-      - validate
-      - build-windows
-      - build-macos-arm64
-      - build-macos-x64
-      - build-linux
-      - combine-macos-manifest
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: exort-*
-          merge-multiple: true
-          path: release-assets
-
-      - name: Generate release checksums
-        shell: bash
-        run: |
-          cd release-assets
-          rm -f SHA256SUMS.txt
-          touch SHA256SUMS.txt
-          shopt -s nullglob
-          for file in *.exe *.dmg *.zip *.AppImage; do
-            sha256sum "$file" >> SHA256SUMS.txt
-          done
-
-      - name: Create draft GitHub Release
+      - name: Upload merged latest-mac.yml to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
-          name: Exort ${{ needs.validate.outputs.tag }}
           draft: true
-          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
-          generate_release_notes: true
           overwrite_files: true
-          files: |
-            release-assets/*.exe
-            release-assets/*.dmg
-            release-assets/*.zip
-            release-assets/*.AppImage
-            release-assets/*.blockmap
-            release-assets/*.zsync
-            release-assets/latest*.yml
-            release-assets/SHA256SUMS.txt
+          files: ${{ runner.temp }}/latest-mac.yml
