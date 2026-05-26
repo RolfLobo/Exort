@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { AlertTriangle, Copy, CopyCheck, FileText } from "lucide-svelte";
+  import { Copy, CopyCheck, FileText, MessageCircleWarning } from "lucide-svelte";
 
   import type {
     AgentPermissionReply,
@@ -934,6 +934,9 @@
     if (outputErrorAttachments.length === 0) return message.content;
     return stripOutputErrorContextBlock(message.content);
   });
+  function summarizeOutputError(text: string): string {
+    return text.replace(/\s+/g, " ").trim();
+  }
   let shouldRenderUserBubble = $derived.by(() => userVisibleContent.trim().length > 0);
 
   $effect(() => {
@@ -1047,21 +1050,23 @@
       <div class="flex max-w-full flex-wrap justify-end gap-2 self-end">
         {#each outputErrorAttachments as attachment (attachment.id)}
           <div
-            class="group inline-flex max-w-full items-center gap-2 rounded-md border border-dark-red/40 bg-dark-red/10 px-2 py-1 text-xs text-dark-fg2"
+            class="group inline-flex max-w-full items-center gap-2 rounded-md border border-dark-border bg-dark-bg px-2 py-1 text-xs text-dark-fg2"
             title={attachment.url ?? "Output error context attached"}
           >
             <span
-              class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded bg-dark-red/20 text-dark-red"
+              class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded bg-dark-bg text-dark-fg3"
               aria-hidden="true"
             >
-              <AlertTriangle class="h-4 w-4" />
+              <MessageCircleWarning class="h-4 w-4" />
             </span>
             <span class="min-w-0">
               <span class="block max-w-44 truncate text-dark-fg1">
                 {attachment.name}
               </span>
-              <span class="block max-w-56 truncate text-[10px] text-dark-fg4">
-                {attachment.url ?? "Output error context attached"}
+              <span class="block max-w-40 truncate text-[10px] text-dark-fg4">
+                {summarizeOutputError(
+                  attachment.url ?? "Output error context attached",
+                )}
               </span>
             </span>
           </div>

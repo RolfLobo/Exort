@@ -9,6 +9,7 @@
     Square,
     X,
     Check,
+    MessageCircleWarning,
   } from "lucide-svelte";
   import {
     filterVisibleModels,
@@ -576,26 +577,28 @@
       <div class="mb-2 flex flex-wrap gap-2">
         {#if pendingOutputErrorContext}
           <div
-            class="group inline-flex max-w-full items-center gap-2 rounded-md border border-dark-red/40 bg-dark-red/10 px-2 py-1 text-xs text-dark-fg2"
+            class="group inline-flex max-w-full items-center gap-2 rounded-md border border-dark-border bg-dark-bg px-2
+            py-1 text-xs text-dark-fg2"
             title={pendingOutputErrorContext.text}
           >
             <span
-              class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded bg-dark-red/20 text-dark-red"
+              class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded bg-dark-bg text-dark-fg3"
               aria-hidden="true"
             >
-              <AlertTriangle class="h-4 w-4" />
+              <MessageCircleWarning class="h-4 w-4" />
             </span>
             <span class="min-w-0">
               <span class="block max-w-44 truncate text-dark-fg1">
                 {pendingOutputErrorContext.label}
               </span>
-              <span class="block max-w-56 truncate text-[10px] text-dark-fg4">
+              <span class="block max-w-40 truncate text-[10px] text-dark-fg4">
                 {summarizeOutputError(pendingOutputErrorContext.text)}
               </span>
             </span>
             <button
               type="button"
-              class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-dark-fg3 transition-colors hover:bg-dark-bg1 hover:text-dark-fg1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-dark-fg3 transition-colors
+               hover:bg-dark-bg1 hover:text-dark-fg1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               onclick={() => onDismissPendingOutputErrorContext()}
               aria-label="Remove output error context"
               title="Remove"
@@ -607,7 +610,8 @@
 
         {#each attachments as attachment (attachment.id)}
           <div
-            class="group inline-flex max-w-full items-center gap-2 rounded-md border border-dark-border bg-dark-bg px-2 py-1 text-xs text-dark-fg2"
+            class="group inline-flex max-w-full items-center gap-2 rounded-md border border-dark-border
+             bg-dark-bg px-2 py-1 text-xs text-dark-fg2"
             title={attachment.path}
           >
             {#if attachment.previewUrl}
