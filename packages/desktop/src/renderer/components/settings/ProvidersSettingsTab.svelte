@@ -22,8 +22,10 @@
     ProviderState,
   } from "../../lib/types";
 
-  let { activeWorkspaceRoot = null } = $props<{
+  let { activeWorkspaceRoot = null, onProviderConfigChanged = () => {} } =
+    $props<{
     activeWorkspaceRoot?: string | null;
+    onProviderConfigChanged?: () => void;
   }>();
 
   let providers = $state<ProviderState[]>([]);
@@ -193,7 +195,7 @@
     });
   }
 
-  async function refreshProviders(): Promise<void> {
+  async function refreshProviders(): Promise<boolean> {
     const currentRequestId = ++requestId;
     loading = true;
     errorMessage = null;
@@ -203,7 +205,7 @@
         workspaceRoot: getWorkspaceRoot(),
       });
 
-      if (currentRequestId !== requestId) return;
+      if (currentRequestId !== requestId) return false;
 
       if (!response.ok || !response.providers) {
         errorMessage = normalizeMessage(
@@ -211,7 +213,7 @@
         );
         providers = [];
         selectedProviderId = null;
-        return;
+        return false;
       }
 
       providers = response.providers;
@@ -224,17 +226,26 @@
           providers[0]?.providerId ??
           null;
       }
+      return true;
     } catch (error) {
-      if (currentRequestId !== requestId) return;
+      if (currentRequestId !== requestId) return false;
       errorMessage = normalizeMessage(
         error instanceof Error ? error.message : "Failed to load providers.",
       );
       providers = [];
       selectedProviderId = null;
+      return false;
     } finally {
       if (currentRequestId === requestId) {
         loading = false;
       }
+    }
+  }
+
+  async function handleManualRefreshProviders(): Promise<void> {
+    const ok = await refreshProviders();
+    if (ok) {
+      onProviderConfigChanged();
     }
   }
 
@@ -282,6 +293,7 @@
       apiKeyInputs = { ...apiKeyInputs, [providerId]: "" };
       upsertProviderState(response.state);
       selectedProviderId = providerId;
+      onProviderConfigChanged();
     } catch (error) {
       errorMessage = normalizeMessage(
         error instanceof Error ? error.message : "Failed to save API key.",
@@ -359,6 +371,7 @@
         pendingOAuth = null;
         upsertProviderState(complete.state);
         selectedProviderId = providerId;
+        onProviderConfigChanged();
       } else {
         // keep silent on successful OAuth start per settings UX
       }
@@ -404,6 +417,7 @@
       pendingOAuth = null;
       upsertProviderState(complete.state);
       selectedProviderId = providerId;
+      onProviderConfigChanged();
     } catch (error) {
       errorMessage = normalizeMessage(
         error instanceof Error ? error.message : "Failed to complete OAuth.",
@@ -436,6 +450,7 @@
 
       upsertProviderState(response.state);
       selectedProviderId = providerId;
+      onProviderConfigChanged();
     } catch (error) {
       errorMessage = normalizeMessage(
         error instanceof Error
@@ -458,7 +473,7 @@
     <div class="h-px min-w-12 flex-1 bg-dark-border"></div>
     <button
       class="btn-secondary inline-flex h-8 items-center justify-center gap-2 px-3 py-0 text-xs"
-      onclick={() => void refreshProviders()}
+      onclick={() => void handleManualRefreshProviders()}
       disabled={loading}
     >
       {#if loading}

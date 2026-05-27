@@ -106,6 +106,8 @@
     rawPercentage: number;
     lastMessageId?: string;
   };
+  type RuntimeModelCatalogEntry =
+    AppState["providers"]["runtimeModelCatalogByWorkspaceRoot"][string];
   type NavbarHotkeyActions = {
     compile: () => void;
     upload: () => void;
@@ -203,6 +205,12 @@
   let updaterEventListener: ((payload: UpdaterEvent) => void) | null = null;
   let updaterState = $state<UpdaterState | null>(null);
   let startupUpdateCheckRequested = false;
+  let startupHadNoSavedWorkspaces = false;
+  let startupFirstWorkspaceWarmupDone = false;
+  const modelCatalogLoadInFlightByWorkspaceRoot = new Map<
+    string,
+    Promise<OpenCodeModelCatalogProvider[] | null>
+  >();
 
   let activeWorkspace = $derived(
     workspaces.find((item) => item.id === activeWorkspaceId) ?? null,
@@ -477,30 +485,209 @@
     return resolvedSelectedModel;
   }
 
-  async function refreshWorkspaceContextLimits(
+  function createDefaultRuntimeModelCatalogEntry(
+    requestId = 0,
+  ): RuntimeModelCatalogEntry {
+    return {
+      providers: [],
+      loading: false,
+      error: null,
+      loadedAt: null,
+      requestId,
+    };
+  }
+
+  function getCachedModelCatalogProviders(
+    workspaceRoot: string | null | undefined,
+  ): OpenCodeModelCatalogProvider[] | null {
+    if (!workspaceRoot) return null;
+    const entry =
+      appStateSnapshot.providers.runtimeModelCatalogByWorkspaceRoot[
+        workspaceRoot
+      ];
+    if (!entry) return null;
+    return entry.providers;
+  }
+
+  async function loadModelCatalogForWorkspace(
+    workspaceRoot: string,
+    options: { force?: boolean } = {},
+  ): Promise<OpenCodeModelCatalogProvider[] | null> {
+    const root = workspaceRoot.trim();
+    if (!root) return null;
+
+    const forceRefresh = options.force === true;
+    const existingEntry =
+      appStateSnapshot.providers.runtimeModelCatalogByWorkspaceRoot[root];
+    if (
+      !forceRefresh &&
+      existingEntry &&
+      !existingEntry.loading &&
+      existingEntry.loadedAt
+    ) {
+      return existingEntry.providers;
+    }
+
+    const existingLoad = modelCatalogLoadInFlightByWorkspaceRoot.get(root);
+    if (existingLoad) return existingLoad;
+
+    const nextRequestId = (existingEntry?.requestId ?? 0) + 1;
+    patchAppState((current) => {
+      const runtimeByRoot =
+        current.providers.runtimeModelCatalogByWorkspaceRoot ?? {};
+      const entry =
+        runtimeByRoot[root] ?? createDefaultRuntimeModelCatalogEntry();
+      return {
+        providers: {
+          runtimeModelCatalogByWorkspaceRoot: {
+            ...runtimeByRoot,
+            [root]: {
+              ...entry,
+              loading: true,
+              error: null,
+              requestId: nextRequestId,
+            },
+          },
+        },
+      };
+    });
+
+    const loadPromise = (async (): Promise<OpenCodeModelCatalogProvider[] | null> => {
+      try {
+        const response = await window.electronAPI.getOpenCodeModelCatalog({
+          workspaceRoot: root,
+        });
+        if (!response.ok || !response.providers) {
+          const message =
+            response.error?.trim() || "Failed to load available models.";
+          patchAppState((current) => {
+            const runtimeByRoot =
+              current.providers.runtimeModelCatalogByWorkspaceRoot ?? {};
+            const entry =
+              runtimeByRoot[root] ?? createDefaultRuntimeModelCatalogEntry();
+            if (entry.requestId !== nextRequestId) return {};
+
+            return {
+              providers: {
+                runtimeModelCatalogByWorkspaceRoot: {
+                  ...runtimeByRoot,
+                  [root]: {
+                    ...entry,
+                    loading: false,
+                    error: message,
+                  },
+                },
+              },
+            };
+          });
+          return null;
+        }
+
+        const providers = response.providers;
+        const isActiveWorkspaceRoot = appStateSnapshot.activeWorkspaceRoot === root;
+        const resolvedSelectedModel = isActiveWorkspaceRoot
+          ? applyWorkspaceContextLimitsFromCatalog(
+              root,
+              providers,
+              appStateSnapshot.providers.selectedModel,
+            )
+          : appStateSnapshot.providers.selectedModel;
+
+        patchAppState((current) => {
+          const runtimeByRoot =
+            current.providers.runtimeModelCatalogByWorkspaceRoot ?? {};
+          const entry =
+            runtimeByRoot[root] ?? createDefaultRuntimeModelCatalogEntry();
+          if (entry.requestId !== nextRequestId) return {};
+
+          return {
+            providers: {
+              selectedModel: sameSelectedModel(
+                resolvedSelectedModel,
+                current.providers.selectedModel,
+              )
+                || !isActiveWorkspaceRoot
+                ? undefined
+                : resolvedSelectedModel,
+              runtimeModelCatalogByWorkspaceRoot: {
+                ...runtimeByRoot,
+                [root]: {
+                  ...entry,
+                  providers,
+                  loading: false,
+                  error: null,
+                  loadedAt: new Date().toISOString(),
+                },
+              },
+            },
+          };
+        });
+        return providers;
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to load available models.";
+        patchAppState((current) => {
+          const runtimeByRoot =
+            current.providers.runtimeModelCatalogByWorkspaceRoot ?? {};
+          const entry =
+            runtimeByRoot[root] ?? createDefaultRuntimeModelCatalogEntry();
+          if (entry.requestId !== nextRequestId) return {};
+
+          return {
+            providers: {
+              runtimeModelCatalogByWorkspaceRoot: {
+                ...runtimeByRoot,
+                [root]: {
+                  ...entry,
+                  loading: false,
+                  error: message,
+                },
+              },
+            },
+          };
+        });
+        return null;
+      } finally {
+        modelCatalogLoadInFlightByWorkspaceRoot.delete(root);
+      }
+    })();
+
+    modelCatalogLoadInFlightByWorkspaceRoot.set(root, loadPromise);
+    return loadPromise;
+  }
+
+  function refreshWorkspaceContextLimits(
     workspaceRoot: string,
     persistedSelectedModel: SelectedModelRef | null = appStateSnapshot.providers.selectedModel,
-  ): Promise<void> {
-    try {
-      const response = await window.electronAPI.getOpenCodeModelCatalog({
-        workspaceRoot,
-      });
-      if (!response.ok || !response.providers) return;
+  ): void {
+    const providers = getCachedModelCatalogProviders(workspaceRoot);
+    if (!providers) return;
 
-      const resolvedSelectedModel = applyWorkspaceContextLimitsFromCatalog(
-        workspaceRoot,
-        response.providers,
-        persistedSelectedModel,
-      );
-      if (!sameSelectedModel(resolvedSelectedModel, persistedSelectedModel)) {
-        patchAppState({
-          providers: {
-            selectedModel: resolvedSelectedModel,
-          },
-        });
-      }
+    const resolvedSelectedModel = applyWorkspaceContextLimitsFromCatalog(
+      workspaceRoot,
+      providers,
+      persistedSelectedModel,
+    );
+    if (!sameSelectedModel(resolvedSelectedModel, persistedSelectedModel)) {
+      patchAppState({
+        providers: {
+          selectedModel: resolvedSelectedModel,
+        },
+      });
+    }
+  }
+
+  function warmModelCatalogForWorkspace(
+    workspaceRoot: string | null | undefined,
+    options: { force?: boolean } = {},
+  ): void {
+    if (!workspaceRoot) return;
+    try {
+      void loadModelCatalogForWorkspace(workspaceRoot, options);
     } catch {
-      // Ignore model-catalog lookup failures; ring falls back to muted state.
+      // Keep startup non-blocking and avoid surfacing warmup failures here.
     }
   }
 
@@ -512,7 +699,7 @@
     if (!workspaceRoot || nextRefreshKey === contextLimitRefreshKey) return;
 
     contextLimitRefreshKey = nextRefreshKey;
-    void refreshWorkspaceContextLimits(workspaceRoot, persistedSelectedModel);
+    refreshWorkspaceContextLimits(workspaceRoot, persistedSelectedModel);
   });
 
   const watchedFilePaths: Record<string, true> = {};
@@ -900,12 +1087,17 @@
     if (workspacesBootstrapped) return;
     try {
       const saved = await window.electronAPI.listSavedWorkspaces();
+      startupHadNoSavedWorkspaces = saved.length === 0;
       workspaces = saved.map((workspace) => ({
         ...workspace,
         tree: getPersistedWorkspaceState(workspace.rootPath)?.fileTree ?? [],
       }));
 
       if (workspaces.length > 0) {
+        for (const workspace of workspaces) {
+          warmModelCatalogForWorkspace(workspace.rootPath);
+        }
+
         const preferredRoot = appStateSnapshot.activeWorkspaceRoot;
         const targetWorkspace =
           (preferredRoot &&
@@ -917,6 +1109,7 @@
         persistWorkspaceMetadata(targetWorkspace, {
           fileTree: targetWorkspace.tree,
         });
+        warmModelCatalogForWorkspace(targetWorkspace.rootPath);
         messages = workspaceMessagesByRoot[targetWorkspace.rootPath] ?? [];
         await restoreWorkspaceOpenFiles(targetWorkspace.rootPath);
         await ensureWorkspaceTree(targetWorkspace.id);
@@ -976,6 +1169,7 @@
 
   async function openFolder() {
     try {
+      const wasWorkspaceEmpty = workspaces.length === 0;
       const result = await window.electronAPI.openFolder();
       if (result.cancelled || !result.workspace || !result.tree) return;
 
@@ -1004,6 +1198,14 @@
       await restoreWorkspaceOpenFiles(nextWorkspace.rootPath);
       await ensureWorkspaceSessions(nextWorkspace.id, { force: true });
       await loadWorkspaceHistory(nextWorkspace.id, { force: true });
+      if (
+        startupHadNoSavedWorkspaces &&
+        wasWorkspaceEmpty &&
+        !startupFirstWorkspaceWarmupDone
+      ) {
+        startupFirstWorkspaceWarmupDone = true;
+        warmModelCatalogForWorkspace(nextWorkspace.rootPath);
+      }
       statusText = `Workspace loaded: ${nextWorkspace.rootPath}`;
     } catch (error) {
       statusText =
@@ -1027,6 +1229,12 @@
   function closeSettingsModal(): void {
     settingsModalOpen = false;
     startupRequirementsAutoInstallRequested = false;
+  }
+
+  function handleProvidersConfigurationChanged(): void {
+    const workspaceRoot = activeWorkspace?.rootPath ?? null;
+    if (!workspaceRoot) return;
+    warmModelCatalogForWorkspace(workspaceRoot, { force: true });
   }
 
   function toggleSettingsModal(initialTab: unknown = "general"): void {
@@ -2749,49 +2957,45 @@
     );
 
     const persistedSelectedModel = appStateSnapshot.providers.selectedModel;
-    try {
-      const catalogResponse = await window.electronAPI.getOpenCodeModelCatalog({
-        workspaceRoot: turnWorkspaceRoot,
-      });
+    const catalogProviders = getCachedModelCatalogProviders(turnWorkspaceRoot);
+    if (catalogProviders) {
+      const resolvedSelectedModel = applyWorkspaceContextLimitsFromCatalog(
+        turnWorkspaceRoot,
+        catalogProviders,
+        persistedSelectedModel,
+      );
 
-      if (catalogResponse.ok && catalogResponse.providers) {
-        const resolvedSelectedModel = applyWorkspaceContextLimitsFromCatalog(
-          turnWorkspaceRoot,
-          catalogResponse.providers,
-          persistedSelectedModel,
-        );
+      if (!sameSelectedModel(resolvedSelectedModel, persistedSelectedModel)) {
+        patchAppState({
+          providers: {
+            selectedModel: resolvedSelectedModel,
+          },
+        });
+      }
 
-        if (
-          !sameSelectedModel(resolvedSelectedModel, persistedSelectedModel)
-        ) {
-          patchAppState({
-            providers: {
-              selectedModel: resolvedSelectedModel,
-            },
-          });
-        }
+      if (resolvedSelectedModel) {
+        turnModelOverride = {
+          providerID: resolvedSelectedModel.providerId,
+          modelID: resolvedSelectedModel.modelId,
+        };
 
-        if (resolvedSelectedModel) {
-          turnModelOverride = {
-            providerID: resolvedSelectedModel.providerId,
-            modelID: resolvedSelectedModel.modelId,
-          };
-
-          if (thinkingLevel !== "default") {
-            const provider = catalogResponse.providers.find(
-              (item) => item.providerId === resolvedSelectedModel.providerId,
-            );
-            const model = provider?.models.find(
-              (item) => item.id === resolvedSelectedModel.modelId,
-            );
-            if (model?.variants?.includes(thinkingLevel)) {
-              turnVariant = thinkingLevel;
-            }
+        if (thinkingLevel !== "default") {
+          const provider = catalogProviders.find(
+            (item) => item.providerId === resolvedSelectedModel.providerId,
+          );
+          const model = provider?.models.find(
+            (item) => item.id === resolvedSelectedModel.modelId,
+          );
+          if (model?.variants?.includes(thinkingLevel)) {
+            turnVariant = thinkingLevel;
           }
         }
       }
-    } catch (error) {
-      void error;
+    } else if (persistedSelectedModel) {
+      turnModelOverride = {
+        providerID: persistedSelectedModel.providerId,
+        modelID: persistedSelectedModel.modelId,
+      };
     }
 
     let completion = "";
@@ -3358,6 +3562,7 @@
       initialTab={settingsModalTab}
       activeWorkspaceRoot={activeWorkspace?.rootPath ?? null}
       onRequirementsUpdated={handleRequirementsUpdated}
+      onProvidersChanged={handleProvidersConfigurationChanged}
       autoInstallRequirementsOnOpen={startupRequirementsAutoInstallRequested}
       onRequirementsAutoInstallConsumed={handleRequirementsAutoInstallConsumed}
     />

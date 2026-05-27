@@ -4,6 +4,7 @@ import {
   createDefaultAppState,
   createDefaultWorkspaceManagerState,
   createDefaultWorkspaceState,
+  stripRuntimeAppStateForPersistence,
   sanitizeAppState,
   sanitizeWorkspaceManagerState,
   sanitizeWorkspaceState,
@@ -40,6 +41,7 @@ type AppStatePatch = {
   providers?: {
     selectedModel?: AppState['providers']['selectedModel'];
     hiddenModels?: AppState['providers']['hiddenModels'];
+    runtimeModelCatalogByWorkspaceRoot?: AppState['providers']['runtimeModelCatalogByWorkspaceRoot'];
   };
 };
 
@@ -73,7 +75,7 @@ function persistAppStateSoon(): void {
 
   appPersistTimer = setTimeout(() => {
     appPersistTimer = null;
-    void window.electronAPI.setAppState(get(appStateStore));
+    void window.electronAPI.setAppState(stripRuntimeAppStateForPersistence(get(appStateStore)));
   }, 120);
 }
 

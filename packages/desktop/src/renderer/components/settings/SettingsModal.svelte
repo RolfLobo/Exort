@@ -22,6 +22,7 @@
     initialTab = "general",
     activeWorkspaceRoot = null,
     onRequirementsUpdated = () => {},
+    onProvidersChanged = () => {},
     autoInstallRequirementsOnOpen = false,
     onRequirementsAutoInstallConsumed = () => {},
   } = $props<{
@@ -29,6 +30,7 @@
     initialTab?: SettingsTab;
     activeWorkspaceRoot?: string | null;
     onRequirementsUpdated?: (requirements: RequirementStatus[]) => void;
+    onProvidersChanged?: () => void;
     autoInstallRequirementsOnOpen?: boolean;
     onRequirementsAutoInstallConsumed?: () => void;
   }>();
@@ -184,7 +186,10 @@
             onAutoInstallTriggered={handleRequirementsAutoInstallTriggered}
           />
         {:else if activeTab === "providers"}
-          <ProvidersSettingsTab {activeWorkspaceRoot} />
+          <ProvidersSettingsTab
+            {activeWorkspaceRoot}
+            onProviderConfigChanged={onProvidersChanged}
+          />
         {:else}
           <BoardsSettingsTab />
         {/if}

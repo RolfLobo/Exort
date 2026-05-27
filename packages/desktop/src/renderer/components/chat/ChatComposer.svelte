@@ -93,14 +93,23 @@
   let thinkingOpen = $state(false);
   let thinkingButtonEl = $state<HTMLButtonElement | null>(null);
   let thinkingPopoverEl = $state<HTMLDivElement | null>(null);
+  let runtimeCatalogByWorkspaceRoot = $state<
+    Record<
+      string,
+      {
+        providers: OpenCodeModelCatalogProvider[];
+        loading: boolean;
+        error: string | null;
+      }
+    >
+  >({});
+  let catalogSourceProviders = $state<OpenCodeModelCatalogProvider[]>([]);
   let catalogProviders = $state<OpenCodeModelCatalogProvider[]>([]);
   let providerLoading = $state(false);
   let providerError = $state<string | null>(null);
   let selectedModel = $state<SelectedModelRef | null>(null);
   let hiddenModels = $state<SelectedModelRef[]>([]);
   let thinkingLevel = $state<ThinkingLevel>("default");
-  let providerRequestId = 0;
-  let lastCatalogEffectKey: string | null = null;
   let dragDepth = 0;
 
   let canSend = $derived(
@@ -367,64 +376,9 @@
       });
   }
 
-  function getWorkspaceRoot(): string | undefined {
-    return activeWorkspaceRoot ?? undefined;
-  }
-
-  async function refreshOpenCodeModelCatalog(): Promise<void> {
-    const currentRequestId = ++providerRequestId;
-    providerLoading = true;
-    providerError = null;
-
-    try {
-      const response = await window.electronAPI.getOpenCodeModelCatalog({
-        workspaceRoot: getWorkspaceRoot(),
-      });
-
-      if (currentRequestId !== providerRequestId) return;
-      if (!response.ok || !response.providers) {
-        catalogProviders = [];
-        providerError =
-          response.error?.trim() || "Failed to load available models.";
-        return;
-      }
-
-      const visibleProviders = filterVisibleModels(
-        response.providers,
-        hiddenModels,
-      );
-      catalogProviders = visibleProviders;
-      const resolvedModel = resolveSelectedModel(
-        visibleProviders,
-        selectedModel,
-      );
-      if (!sameSelectedModel(resolvedModel, selectedModel)) {
-        patchAppState({
-          providers: {
-            selectedModel: resolvedModel,
-          },
-        });
-      }
-    } catch (error) {
-      if (currentRequestId !== providerRequestId) return;
-      catalogProviders = [];
-      providerError =
-        error instanceof Error
-          ? error.message
-          : "Failed to load available models.";
-    } finally {
-      if (currentRequestId === providerRequestId) {
-        providerLoading = false;
-      }
-    }
-  }
-
   function toggleModelPopover(): void {
     thinkingOpen = false;
     modelOpen = !modelOpen;
-    if (modelOpen) {
-      void refreshOpenCodeModelCatalog();
-    }
   }
 
   function isThinkingLevelSupported(value: ThinkingLevel): boolean {
@@ -514,6 +468,8 @@
       if (!sameSelectedModelList(state.providers.hiddenModels, hiddenModels)) {
         hiddenModels = state.providers.hiddenModels;
       }
+      runtimeCatalogByWorkspaceRoot =
+        state.providers.runtimeModelCatalogByWorkspaceRoot ?? {};
       const nextThinkingLevel = state.agent.thinkingLevel ?? "default";
       if (nextThinkingLevel !== thinkingLevel) {
         thinkingLevel = nextThinkingLevel;
@@ -530,12 +486,25 @@
   });
 
   $effect(() => {
-    const nextCatalogEffectKey = `${activeWorkspaceRoot ?? "none"}\u0000${selectedModelListKey(hiddenModels)}`;
+    const runtimeEntry = activeWorkspaceRoot
+      ? runtimeCatalogByWorkspaceRoot[activeWorkspaceRoot]
+      : undefined;
+    catalogSourceProviders = runtimeEntry?.providers ?? [];
+    providerLoading = runtimeEntry?.loading === true;
+    providerError = runtimeEntry?.error ?? null;
+  });
 
-    if (nextCatalogEffectKey === lastCatalogEffectKey) return;
-
-    lastCatalogEffectKey = nextCatalogEffectKey;
-    void refreshOpenCodeModelCatalog();
+  $effect(() => {
+    const visibleProviders = filterVisibleModels(catalogSourceProviders, hiddenModels);
+    catalogProviders = visibleProviders;
+    const resolvedModel = resolveSelectedModel(visibleProviders, selectedModel);
+    if (!sameSelectedModel(resolvedModel, selectedModel)) {
+      patchAppState({
+        providers: {
+          selectedModel: resolvedModel,
+        },
+      });
+    }
   });
 
   $effect(() => {
@@ -711,9 +680,9 @@
                   >
                 </div>
 
-                {#if providerLoading}
+                {#if providerLoading && catalogProviders.length === 0}
                   <p class="text-xs text-dark-fg3">Loading models...</p>
-                {:else if providerError}
+                {:else if providerError && catalogProviders.length === 0}
                   <p class="text-xs text-dark-red">{providerError}</p>
                 {:else}
                   <div class="space-y-2">

@@ -1,5 +1,8 @@
 import {
   APP_STATE_VERSION,
+  type ModelCatalogProvider,
+  type ModelCatalogProviderModel,
+  type RuntimeModelCatalogState,
   type SelectedModelRef,
   WORKSPACE_STATE_VERSION,
   type AppState,
@@ -45,6 +48,112 @@ function sanitizeSelectedModelRef(value: unknown): SelectedModelRef | null {
     providerId,
     modelId
   };
+}
+
+function sanitizeCatalogProviderModel(value: unknown): ModelCatalogProviderModel | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const candidate = value as Partial<ModelCatalogProviderModel>;
+  const id = asNonBlankString(candidate.id);
+  const name = asNonBlankString(candidate.name);
+  if (!id || !name) return null;
+
+  const status =
+    candidate.status === 'active' ||
+    candidate.status === 'beta' ||
+    candidate.status === 'alpha' ||
+    candidate.status === 'deprecated'
+      ? candidate.status
+      : null;
+  const releaseDate = asNonBlankString(candidate.releaseDate) ?? null;
+  const variants = asUniqueStringArray(candidate.variants);
+
+  const contextLimit =
+    typeof candidate.limit?.context === 'number' && Number.isFinite(candidate.limit.context)
+      ? Math.max(0, Math.floor(candidate.limit.context))
+      : undefined;
+  const outputLimit =
+    typeof candidate.limit?.output === 'number' && Number.isFinite(candidate.limit.output)
+      ? Math.max(0, Math.floor(candidate.limit.output))
+      : undefined;
+
+  return {
+    id,
+    name,
+    releaseDate,
+    status,
+    reasoning: candidate.reasoning !== false,
+    toolCall: candidate.toolCall !== false,
+    variants: variants.length > 0 ? variants : undefined,
+    limit:
+      contextLimit !== undefined || outputLimit !== undefined
+        ? {
+            context: contextLimit,
+            output: outputLimit
+          }
+        : undefined
+  };
+}
+
+function sanitizeCatalogProvider(value: unknown): ModelCatalogProvider | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const candidate = value as Partial<ModelCatalogProvider>;
+  const providerId = asNonBlankString(candidate.providerId);
+  if (!providerId) return null;
+
+  const providerName = asNonBlankString(candidate.providerName) ?? providerId;
+  const defaultModelId = asNonBlankString(candidate.defaultModelId) ?? null;
+  const recommendedModelId = asNonBlankString(candidate.recommendedModelId) ?? null;
+  const models = Array.isArray(candidate.models)
+    ? candidate.models.map((item) => sanitizeCatalogProviderModel(item)).filter((item): item is ModelCatalogProviderModel => item !== null)
+    : [];
+
+  return {
+    providerId,
+    providerName,
+    available: candidate.available === false ? false : true,
+    connected: candidate.connected === true,
+    defaultModelId,
+    recommendedModelId,
+    models
+  };
+}
+
+function sanitizeRuntimeModelCatalogState(value: unknown): RuntimeModelCatalogState {
+  const defaults = createDefaultRuntimeModelCatalogState();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return defaults;
+
+  const candidate = value as Partial<RuntimeModelCatalogState>;
+  const providers = Array.isArray(candidate.providers)
+    ? candidate.providers.map((item) => sanitizeCatalogProvider(item)).filter((item): item is ModelCatalogProvider => item !== null)
+    : [];
+  const loadedAt = asNonBlankString(candidate.loadedAt) ?? null;
+  const requestId =
+    typeof candidate.requestId === 'number' && Number.isFinite(candidate.requestId)
+      ? Math.max(0, Math.floor(candidate.requestId))
+      : 0;
+
+  return {
+    providers,
+    loading: candidate.loading === true,
+    error: asNonBlankString(candidate.error) ?? null,
+    loadedAt,
+    requestId
+  };
+}
+
+function sanitizeRuntimeModelCatalogByWorkspaceRoot(value: unknown): Record<string, RuntimeModelCatalogState> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  const result: Record<string, RuntimeModelCatalogState> = {};
+  for (const [workspaceRoot, state] of Object.entries(value as Record<string, unknown>)) {
+    const root = asNonBlankString(workspaceRoot);
+    if (!root) continue;
+    result[root] = sanitizeRuntimeModelCatalogState(state);
+  }
+
+  return result;
 }
 
 function sanitizeHiddenModelRefs(value: unknown): SelectedModelRef[] {
@@ -133,6 +242,16 @@ export function sanitizeTree(items: unknown): PersistedTreeItem[] {
   return next;
 }
 
+export function createDefaultRuntimeModelCatalogState(): RuntimeModelCatalogState {
+  return {
+    providers: [],
+    loading: false,
+    error: null,
+    loadedAt: null,
+    requestId: 0
+  };
+}
+
 export function createDefaultAppState(): AppState {
   return {
     version: APP_STATE_VERSION,
@@ -156,7 +275,8 @@ export function createDefaultAppState(): AppState {
     },
     providers: {
       selectedModel: null,
-      hiddenModels: []
+      hiddenModels: [],
+      runtimeModelCatalogByWorkspaceRoot: {}
     }
   };
 }
@@ -267,7 +387,20 @@ export function sanitizeAppState(input: unknown): AppState {
               providerId: 'openai',
               modelId: legacyOpenAIModelId
             }
-          : null)
+          : null),
+      runtimeModelCatalogByWorkspaceRoot: sanitizeRuntimeModelCatalogByWorkspaceRoot(
+        providersCandidate?.runtimeModelCatalogByWorkspaceRoot
+      )
+    }
+  };
+}
+
+export function stripRuntimeAppStateForPersistence(input: AppState): AppState {
+  return {
+    ...input,
+    providers: {
+      ...input.providers,
+      runtimeModelCatalogByWorkspaceRoot: {}
     }
   };
 }

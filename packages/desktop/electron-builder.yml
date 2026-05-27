@@ -32,6 +32,7 @@ win:
   icon: resources/icon.ico
   target:
     - nsis
+    - zip
 linux:
   category: Development
   icon: resources/exort_logo.png
@@ -41,3 +42,4 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: true

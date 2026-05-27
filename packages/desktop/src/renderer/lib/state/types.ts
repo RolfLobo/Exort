@@ -22,6 +22,38 @@ export type SelectedModelRef = {
   modelId: string;
 };
 
+export type ModelCatalogProviderModel = {
+  id: string;
+  name: string;
+  releaseDate: string | null;
+  status: 'active' | 'beta' | 'alpha' | 'deprecated' | null;
+  reasoning: boolean;
+  toolCall: boolean;
+  variants?: string[];
+  limit?: {
+    context?: number;
+    output?: number;
+  };
+};
+
+export type ModelCatalogProvider = {
+  providerId: string;
+  providerName: string;
+  available?: boolean;
+  connected: boolean;
+  defaultModelId: string | null;
+  recommendedModelId: string | null;
+  models: ModelCatalogProviderModel[];
+};
+
+export type RuntimeModelCatalogState = {
+  providers: ModelCatalogProvider[];
+  loading: boolean;
+  error: string | null;
+  loadedAt: string | null;
+  requestId: number;
+};
+
 export type RuntimeRequirementId = "opencode" | "arduino-cli";
 
 export type RuntimeRequirementStatus = {
@@ -67,6 +99,7 @@ export type AppState = {
   providers: {
     selectedModel: SelectedModelRef | null;
     hiddenModels: SelectedModelRef[];
+    runtimeModelCatalogByWorkspaceRoot: Record<string, RuntimeModelCatalogState>;
   };
 };
 
