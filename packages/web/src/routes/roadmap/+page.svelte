@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import SiteNav from "$lib/components/landing/SiteNav.svelte";
 
-  type RoadmapStatus = "planning" | "in progress" | "shipped";
+  type RoadmapStatus = "planned" | "in progress" | "shipped";
   type RoadmapItem = {
     title: string;
     detail: string;
@@ -11,39 +11,68 @@
 
   const roadmapItems: RoadmapItem[] = [
     {
-      title: "Boards Workspace Presets",
+      title: "Arduino CLI support",
       detail:
-        "Save reusable board + port + baud presets per project so setup is instant on every open.",
+        "Added support for Arduino CLI as an alternative to PlatformIO for Arduino development workflows.",
       status: "shipped",
     },
     {
-      title: "Provider Connection Flow",
+      title: "OpenCode Runtime integration",
       detail:
-        "Unified provider onboarding with clearer setup states and connection feedback.",
+        "Switched to using the OpenCode Runtime as the default managed runtime for Exort.",
       status: "shipped",
     },
     {
-      title: "Serial Monitor Session Markers",
+      title: "Managed Requirement Runtime",
       detail:
-        "Add timestamped markers and quick filters to isolate relevant output during long debug sessions.",
+        "Moved Arduino CLI installation and usage to Exort-managed pinned runtimes and aligned compile/upload flows with managed binaries.",
+      status: "shipped",
+    },
+    {
+      title: "Provider support for multiple models ",
+      detail:
+        "Added support for multiple concurrent provider models and updated provider connection flows.",
+      status: "shipped",
+    },
+    {
+      title: "Desktop Auto-Update Release Flow",
+      detail:
+        "Implemented packaged-build updater integration with check/download/install UX and release artifact metadata for update discovery.",
+      status: "shipped",
+    },
+    {
+      title: "macOS Signing and Notarization Hardening",
+      detail:
+        "Extended release pipeline to validate signing/notarization/stapling for macOS.",
+      status: "shipped",
+    },
+    {
+      title: "Soft-Launch",
+      detail:
+        "Soft-launch Exort to gather early feedback and iterate on core experiences before a broader announcement.",
       status: "in progress",
     },
     {
-      title: "Compile Insight Timeline",
+      title: "Windows Code-Signing ",
       detail:
-        "Expose compile/upload lifecycle steps with actionable error context for faster fixes.",
-      status: "planning",
+        "Implement Windows code-signing for Exort release artifacts to improve security and reduce SmartScreen warnings during installation.",
+      status: "planned",
     },
     {
-      title: "Workspace Import Detection",
+      title: "add Skills and Plugins support",
+      detail: "Add support for Skills and Plugins in Exort.",
+      status: "planned",
+    },
+    {
+      title: "Public Launch",
       detail:
-        "Auto-detect Arduino-style structures and prefill project metadata on import.",
-      status: "planning",
+        "Public launch of Exort with announcement and outreach to broader developer communities.",
+      status: "planned",
     },
   ];
 
   const statusMeta: Record<RoadmapStatus, { label: string; tone: string }> = {
-    planning: {
+    planned: {
       label: "Planned",
       tone: "text-gruvbox-blue/90",
     },
@@ -60,14 +89,14 @@
   const firstInProgressIndex = roadmapItems.findIndex(
     (item) => item.status === "in progress",
   );
-  const firstPlanningIndex = roadmapItems.findIndex(
-    (item) => item.status === "planning",
+  const firstPlannedIndex = roadmapItems.findIndex(
+    (item) => item.status === "planned",
   );
   const currentStepIndex =
     firstInProgressIndex !== -1
       ? firstInProgressIndex
-      : firstPlanningIndex !== -1
-        ? firstPlanningIndex
+      : firstPlannedIndex !== -1
+        ? firstPlannedIndex
         : Math.max(roadmapItems.length - 1, 0);
 
   let timelineRootEl: HTMLElement | null = null;
@@ -228,7 +257,7 @@
   <title>Exort Roadmap</title>
   <meta
     name="description"
-    content="Track Exort roadmap updates across planning, in progress, and shipped milestones."
+    content="Track Exort roadmap updates across planned, in progress, and shipped milestones."
   />
 </svelte:head>
 
@@ -246,9 +275,6 @@
       >
         What We Are Building Next
       </h1>
-      <p class="mt-5 max-w-2xl text-base leading-relaxed text-gruvbox-muted">
-        Oldest to newest progression, with the current step highlighted.
-      </p>
     </header>
 
     <section
@@ -278,12 +304,8 @@
         {#each roadmapItems as item, index}
           {@const isDone = index < currentStepIndex}
           {@const isCurrent = index === currentStepIndex}
-          {@const statusLabel = isDone
-            ? "Completed"
-            : statusMeta[item.status].label}
-          {@const statusTone = isDone
-            ? "text-gruvbox-green/80"
-            : statusMeta[item.status].tone}
+          {@const statusLabel = statusMeta[item.status].label}
+          {@const statusTone = statusMeta[item.status].tone}
           <article data-step-item class="relative pl-14 opacity-0 sm:pl-16">
             <span
               data-step-node

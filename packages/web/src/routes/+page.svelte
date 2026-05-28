@@ -57,7 +57,7 @@
 
   const workflowSteps = [
     {
-      title: "4 Free AI Models",
+      title: "Free AI Models included",
       color: "text-gruvbox-orange",
       description:
         "Start with free included models or connect your own provider.",
@@ -450,8 +450,8 @@
                 >
                   An <span class="underline underline-offset-4"
                     >open-source
-                  </span> coding environment for embedded development that helps you
-                  generate, shape, and improve microcontroller code with AI assistance.
+                  </span> coding environment for embedded development that helps
+                  you generate, shape, and improve microcontroller code with AI assistance.
                 </p>
 
                 <div
