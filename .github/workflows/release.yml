@@ -119,6 +119,7 @@ jobs:
           overwrite_files: true
           files: |
             packages/desktop/release/*.exe
+            packages/desktop/release/*.zip
             packages/desktop/release/*.blockmap
             packages/desktop/release/latest*.yml
 
