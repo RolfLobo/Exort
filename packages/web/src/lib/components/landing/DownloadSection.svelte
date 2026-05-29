@@ -37,8 +37,8 @@
     },
     {
       label: "Windows",
-      file: `Exort-${EXORT_APP_VERSION}-win-x64.exe`,
-      href: versionedDownloadPath("win-x64.exe"),
+      file: `Exort-${EXORT_APP_VERSION}-win-x64-installer.zip`,
+      href: versionedDownloadPath("win-x64-installer.zip"),
       icon: windowsIcon,
       color: "#fe8019",
     },
