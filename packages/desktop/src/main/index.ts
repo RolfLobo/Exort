@@ -23,9 +23,11 @@ import {
   rejectOpenCodeQuestion,
   replyOpenCodePermission,
   replyOpenCodeQuestion,
+  runOpenCodeSidecarSmokeCheck,
   runOpenCodeTurn,
   shutdownOpenCodeRuntime,
   type AgentHistoryMessage,
+  type OpenCodeSidecarSmokeCheckResult,
   type OpenCodePromptAttachment,
   type OpenCodePendingInterrupts,
   type AgentStreamEvent,
@@ -173,8 +175,10 @@ const SERIAL_BAUD_RATE_DEFAULT = 9600;
 const SERIAL_BUFFER_SIZE_DEFAULT = 500;
 const SERIAL_BUFFER_SIZE_MIN = 100;
 const SERIAL_BUFFER_SIZE_MAX = 5000;
+const OPEN_CODE_SMOKE_CHECK_TIMEOUT_MS = 30_000;
 
 app.setName(APP_NAME);
+let appQuitCleanupInProgress = false;
 
 function sendMenuCommandToFocusedWindow(command: AppMenuCommandId): void {
   const focusedWindow = BrowserWindow.getFocusedWindow();
@@ -674,6 +678,25 @@ function safeConsoleWrite(level: 'log' | 'error', message: string): void {
       throw error;
     }
   }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+    timer.unref();
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
 }
 
 function runStdinFormatter(command: string, args: string[], input: string): Promise<{
@@ -1466,9 +1489,30 @@ app.whenReady().then(() => {
     }
 
     try {
-      const result = await installRequirement(id);
-      if (id === 'opencode' && result.ok) {
+      if (id === 'opencode') {
         await shutdownOpenCodeRuntime();
+      }
+
+      const result = await installRequirement(id);
+
+      if (id === 'opencode' && result.ok) {
+        const smoke = await withTimeout(
+          runOpenCodeSidecarSmokeCheck({
+            onLog: logOpenCodeLine,
+            restartRuntime: true
+          }),
+          OPEN_CODE_SMOKE_CHECK_TIMEOUT_MS,
+          'OpenCode sidecar smoke check timed out after install.'
+        );
+
+        if (!smoke.ok) {
+          return {
+            ok: false,
+            result,
+            error: `OpenCode installed but smoke check failed: ${smoke.details ?? 'Unknown smoke-check error.'}`,
+            smoke
+          };
+        }
       }
       return { ok: true, result };
     } catch (error) {
@@ -1478,6 +1522,80 @@ app.whenReady().then(() => {
       };
     }
   });
+
+  ipcMain.handle(
+    'opencode:smoke-check',
+    async (
+      _event,
+      payload?: {
+        workspaceRoot?: string;
+        restartRuntime?: boolean;
+      }
+    ): Promise<{ ok: boolean; result?: OpenCodeSidecarSmokeCheckResult; error?: string }> => {
+      try {
+        const workspaceRoot = asNonBlankString(payload?.workspaceRoot) ?? undefined;
+        const result = await withTimeout(
+          runOpenCodeSidecarSmokeCheck({
+            workspaceRoot,
+            restartRuntime: payload?.restartRuntime === true,
+            onLog: logOpenCodeLine
+          }),
+          OPEN_CODE_SMOKE_CHECK_TIMEOUT_MS,
+          'OpenCode sidecar smoke check timed out.'
+        );
+
+        if (!result.ok) {
+          return {
+            ok: false,
+            result,
+            error: result.details ?? 'OpenCode sidecar smoke check failed.'
+          };
+        }
+
+        return { ok: true, result };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'OpenCode sidecar smoke check failed.';
+        return { ok: false, error: message };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'opencode:restart',
+    async (
+      _event,
+      payload?: {
+        workspaceRoot?: string;
+      }
+    ): Promise<{ ok: boolean; result?: OpenCodeSidecarSmokeCheckResult; error?: string }> => {
+      try {
+        await shutdownOpenCodeRuntime();
+        const workspaceRoot = asNonBlankString(payload?.workspaceRoot) ?? undefined;
+        const result = await withTimeout(
+          runOpenCodeSidecarSmokeCheck({
+            workspaceRoot,
+            restartRuntime: true,
+            onLog: logOpenCodeLine
+          }),
+          OPEN_CODE_SMOKE_CHECK_TIMEOUT_MS,
+          'OpenCode restart smoke check timed out.'
+        );
+
+        if (!result.ok) {
+          return {
+            ok: false,
+            result,
+            error: result.details ?? 'OpenCode restart failed.'
+          };
+        }
+
+        return { ok: true, result };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to restart OpenCode.';
+        return { ok: false, error: message };
+      }
+    }
+  );
 
   ipcMain.handle('arduino:list-ports', async () => {
     return listConnectedSerialPorts();
@@ -1953,7 +2071,30 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
-  void shutdownOpenCodeRuntime();
-  void serialMonitor.dispose();
+app.on('before-quit', (event) => {
+  if (appQuitCleanupInProgress) {
+    return;
+  }
+
+  event.preventDefault();
+  appQuitCleanupInProgress = true;
+
+  void (async () => {
+    try {
+      await Promise.allSettled([
+        withTimeout(
+          shutdownOpenCodeRuntime(),
+          7000,
+          'Timed out while shutting down OpenCode runtime during app quit.'
+        ),
+        withTimeout(
+          serialMonitor.dispose(),
+          7000,
+          'Timed out while shutting down serial monitor during app quit.'
+        )
+      ]);
+    } finally {
+      app.quit();
+    }
+  })();
 });

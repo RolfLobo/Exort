@@ -111,6 +111,20 @@ jobs:
       - name: Package desktop release artifacts
         run: npm --workspace @exort/desktop run package
 
+      - name: Zip Windows installer executable
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "packages/desktop/release/*.exe" | Select-Object -First 1
+          if (-not $installer) {
+            throw "No Windows installer .exe found in packages/desktop/release."
+          }
+
+          $zipPath = Join-Path $installer.DirectoryName ("{0}-installer.zip" -f $installer.BaseName)
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+          Compress-Archive -Path $installer.FullName -DestinationPath $zipPath
+
       - name: Upload Windows assets to release
         uses: softprops/action-gh-release@v2
         with:

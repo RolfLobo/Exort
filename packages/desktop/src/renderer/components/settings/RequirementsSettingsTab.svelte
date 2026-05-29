@@ -6,7 +6,9 @@
     ChevronRight,
     Download,
     Loader,
+    Power,
     RefreshCw,
+    ShieldCheck,
     Wrench,
     XCircle,
   } from "lucide-svelte";
@@ -51,6 +53,11 @@
   let installProgress = $state<Partial<Record<RequirementId, number>>>({});
   let errorMessage = $state<string | null>(null);
   let manualCommands = $state<string[]>([]);
+  let smokeCheckBusy = $state(false);
+  let restartBusy = $state(false);
+  let smokeCheckOk = $state<boolean | null>(null);
+  let smokeCheckMessage = $state<string | null>(null);
+  let smokeCheckCheckedAt = $state<string | null>(null);
   const progressTimers = new Map<RequirementId, number>();
   let autoInstallTriggered = $state(false);
 
@@ -361,6 +368,69 @@
       installProgress = {};
     }
   }
+
+  async function runOpenCodeSmokeCheck(options: {
+    restartRuntime?: boolean;
+  } = {}): Promise<void> {
+    const restartRuntime = options.restartRuntime === true;
+    if (restartRuntime) {
+      if (restartBusy) return;
+      restartBusy = true;
+    } else {
+      if (smokeCheckBusy) return;
+      smokeCheckBusy = true;
+    }
+
+    smokeCheckMessage = null;
+    const payload = {
+      workspaceRoot: undefined,
+      restartRuntime,
+    };
+
+    try {
+      const response = restartRuntime
+        ? await window.electronAPI.restartOpenCodeRuntime({
+            workspaceRoot: payload.workspaceRoot,
+          })
+        : await window.electronAPI.checkOpenCodeSidecarHealth({
+            workspaceRoot: payload.workspaceRoot,
+            restartRuntime: false,
+          });
+
+      smokeCheckCheckedAt = new Date().toISOString();
+      if (!response.ok || !response.result) {
+        smokeCheckOk = false;
+        smokeCheckMessage = normalizeStatusMessage(
+          response.error ?? "OpenCode check failed.",
+        );
+        return;
+      }
+
+      smokeCheckOk = response.result.ok;
+      smokeCheckMessage = normalizeStatusMessage(
+        restartRuntime
+          ? `OpenCode restarted and is running (${response.result.durationMs}ms).`
+          : `OpenCode is running (${response.result.durationMs}ms).`,
+      );
+      if (restartRuntime) {
+        await loadRequirements();
+      }
+    } catch (error) {
+      smokeCheckCheckedAt = new Date().toISOString();
+      smokeCheckOk = false;
+      smokeCheckMessage = normalizeStatusMessage(
+        error instanceof Error
+          ? error.message
+          : "OpenCode check failed.",
+      );
+    } finally {
+      if (restartRuntime) {
+        restartBusy = false;
+      } else {
+        smokeCheckBusy = false;
+      }
+    }
+  }
 </script>
 
 <div class="flex min-w-0 flex-col gap-4">
@@ -532,6 +602,59 @@
             {/if}
             <span>Info</span>
           </button>
+
+          {#if id === "opencode" && installed}
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button
+                class="inline-flex h-7 items-center gap-1 rounded-md border border-dark-border bg-dark-bg px-2 text-[11px] text-dark-fg2 transition-colors hover:bg-dark-bgH hover:text-dark-fg disabled:cursor-not-allowed disabled:opacity-60"
+                onclick={() => void runOpenCodeSmokeCheck()}
+                disabled={smokeCheckBusy || restartBusy || loading || installAllBusy}
+                aria-label="Check OpenCode"
+              >
+                {#if smokeCheckBusy}
+                  <Loader class="h-3 w-3 animate-spin" />
+                  <span>Checking</span>
+                {:else}
+                  <ShieldCheck class="h-3 w-3" />
+                  <span>Check OpenCode</span>
+                {/if}
+              </button>
+              <button
+                class="inline-flex h-7 items-center gap-1 rounded-md border border-dark-border bg-dark-bg px-2 text-[11px] text-dark-fg2 transition-colors hover:bg-dark-bgH hover:text-dark-fg disabled:cursor-not-allowed disabled:opacity-60"
+                onclick={() => void runOpenCodeSmokeCheck({ restartRuntime: true })}
+                disabled={restartBusy || smokeCheckBusy || loading || installAllBusy}
+                aria-label="Restart OpenCode"
+              >
+                {#if restartBusy}
+                  <Loader class="h-3 w-3 animate-spin" />
+                  <span>Restarting</span>
+                {:else}
+                  <Power class="h-3 w-3" />
+                  <span>Restart OpenCode</span>
+                {/if}
+              </button>
+            </div>
+          {/if}
+
+          {#if id === "opencode" && smokeCheckMessage}
+            <p
+              class={`text-[11px] ${
+                smokeCheckOk === true
+                  ? "text-dark-green2"
+                  : smokeCheckOk === false
+                    ? "text-dark-red2"
+                    : "text-dark-fg3"
+              }`}
+            >
+              {smokeCheckMessage}
+              {#if smokeCheckCheckedAt}
+                <span class="text-dark-fg4">
+                  {" "}
+                  ({new Date(smokeCheckCheckedAt).toLocaleTimeString()})
+                </span>
+              {/if}
+            </p>
+          {/if}
 
           {#if expanded}
             <div

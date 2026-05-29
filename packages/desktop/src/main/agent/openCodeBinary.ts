@@ -8,6 +8,7 @@ export const EXORT_MANAGED_OPENCODE_VERSION = '1.15.7';
 export const EXORT_MANAGED_OPENCODE_RELEASE_TAG = `v${EXORT_MANAGED_OPENCODE_VERSION}`;
 
 const INSTALL_TIMEOUT_MS = 8 * 60 * 1000;
+const VERSION_CHECK_TIMEOUT_MS = 15_000;
 const EXORT_RUNTIME_APP_DIR = 'Exort';
 const EXORT_RUNTIME_SEGMENTS = ['runtime', 'opencode'] as const;
 let lastProvisionDiagnostics: string | null = null;
@@ -300,10 +301,31 @@ async function runVersionCommand(binaryPath: string): Promise<VersionResult> {
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        proc.kill('SIGTERM');
+      } catch {
+        // Best effort.
+      }
+      setTimeout(() => {
+        if (proc.exitCode == null) {
+          try {
+            proc.kill('SIGKILL');
+          } catch {
+            // Best effort.
+          }
+        }
+      }, 2000).unref();
+    }, VERSION_CHECK_TIMEOUT_MS);
+    timer.unref();
 
     const settle = (result: VersionResult) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       resolve(result);
     };
 
@@ -325,7 +347,8 @@ async function runVersionCommand(binaryPath: string): Promise<VersionResult> {
 
     proc.on('close', (code) => {
       if (code !== 0) {
-        const detail = `${stderr}`.trim() || `${stdout}`.trim() || `Exit code ${code ?? 'unknown'}.`;
+        const timeoutDetail = timedOut ? `Timed out after ${VERSION_CHECK_TIMEOUT_MS}ms.` : '';
+        const detail = `${stderr}`.trim() || `${stdout}`.trim() || timeoutDetail || `Exit code ${code ?? 'unknown'}.`;
         settle({
           ok: false,
           version: null,

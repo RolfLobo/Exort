@@ -171,6 +171,13 @@ export type OpenCodeProviderOAuthCompleteResult = {
   ok: boolean;
 };
 
+export type OpenCodeSidecarSmokeCheckResult = {
+  ok: boolean;
+  durationMs: number;
+  url?: string;
+  details?: string;
+};
+
 export type OpenCodePromptAttachment = {
   id: string;
   name: string;
@@ -538,6 +545,82 @@ function getResponseErrorMessage(response: unknown): string | null {
 function resolveDirectoryFromWorkspaceRoot(workspaceRoot?: string): string | undefined {
   const directory = getFirstNonBlankString(workspaceRoot);
   return directory ?? undefined;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+    timer.unref();
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+export async function runOpenCodeSidecarSmokeCheck(params?: {
+  workspaceRoot?: string;
+  onLog?: (line: string) => void;
+  restartRuntime?: boolean;
+}): Promise<OpenCodeSidecarSmokeCheckResult> {
+  const startedAt = Date.now();
+  const log = (line: string) => {
+    params?.onLog?.(line);
+  };
+
+  try {
+    if (params?.restartRuntime === true) {
+      log('smoke-check:runtime:restart');
+      await shutdownOpenCode(log);
+      workspaceSessions.clear();
+      loggedSessionIds.clear();
+    }
+
+    const runtime = await withTimeout(
+      getOpenCodeRuntime(log),
+      20_000,
+      'Timeout waiting for OpenCode runtime initialization during smoke check.'
+    );
+
+    const listProviders = runtime.client.provider?.list;
+    if (typeof listProviders !== 'function') {
+      throw new Error('OpenCode provider list API is not available in this SDK runtime');
+    }
+
+    const directory = resolveDirectoryFromWorkspaceRoot(params?.workspaceRoot);
+    const response = await withTimeout(
+      listProviders({ directory }),
+      10_000,
+      'Timeout waiting for OpenCode provider API response during smoke check.'
+    );
+    const responseError = getResponseErrorMessage(response);
+    if (responseError) {
+      throw new Error(responseError);
+    }
+
+    const durationMs = Date.now() - startedAt;
+    return {
+      ok: true,
+      durationMs,
+      url: runtime.server?.url,
+      details: `OpenCode sidecar responded in ${durationMs}ms.`
+    };
+  } catch (error) {
+    const durationMs = Date.now() - startedAt;
+    return {
+      ok: false,
+      durationMs,
+      details: getErrorMessage(error)
+    };
+  }
 }
 
 async function recycleOpenCodeRuntimeAfterProviderAuthMutation(log?: (line: string) => void): Promise<void> {

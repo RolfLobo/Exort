@@ -1094,10 +1094,6 @@
       }));
 
       if (workspaces.length > 0) {
-        for (const workspace of workspaces) {
-          warmModelCatalogForWorkspace(workspace.rootPath);
-        }
-
         const preferredRoot = appStateSnapshot.activeWorkspaceRoot;
         const targetWorkspace =
           (preferredRoot &&
@@ -1480,6 +1476,7 @@
       workspace,
       selectedSessionId ? { currentSessionId: selectedSessionId } : {},
     );
+    warmModelCatalogForWorkspace(workspace.rootPath);
     messages = workspaceMessagesByRoot[workspace.rootPath] ?? [];
     await restoreWorkspaceOpenFiles(workspace.rootPath);
     await ensureWorkspaceTree(workspaceId);

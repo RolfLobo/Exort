@@ -116,6 +116,8 @@ export type OpenCodeRuntime = {
 };
 
 let runtimePromise: Promise<OpenCodeRuntime> | null = null;
+let activeRuntimeGeneration: number | null = null;
+let runtimeGenerationSeed = 0;
 const OPENCODE_CONFIG_DIR_NAME = 'opencode-config';
 const OPENCODE_TOOLS_DIR_NAME = 'tools';
 
@@ -291,6 +293,7 @@ async function ensureOpenCodeConfigDir(managedRoot: string, log?: OpenCodeLog): 
 
 async function createOpenCodeRuntime(log?: OpenCodeLog): Promise<OpenCodeRuntime> {
   log?.('runtime:create:start');
+  const runtimeGeneration = ++runtimeGenerationSeed;
   const managedBinary = await ensureManagedOpenCodeBinary({ log, installIfMissing: false });
   await ensureOpenCodeConfigDir(managedBinary.managedRoot, log);
   const isolation = await ensureOpenCodeIsolation();
@@ -307,10 +310,17 @@ async function createOpenCodeRuntime(log?: OpenCodeLog): Promise<OpenCodeRuntime
       [EXORT_ARDUINO_CLI_BINARY_ENV]: managedArduinoCli.binaryPath
     },
     isolationInfo: isolation,
+    onUnexpectedExit: ({ code, signal }) => {
+      if (activeRuntimeGeneration !== runtimeGeneration) return;
+      activeRuntimeGeneration = null;
+      runtimePromise = null;
+      log?.(`runtime:invalidated reason=sidecar-exit code=${code ?? 'null'} signal=${signal ?? 'null'}`);
+    },
     log
   });
 
   log?.('sdk:v2-client:import:start');
+  activeRuntimeGeneration = runtimeGeneration;
 
   try {
     const v2Module = (await import('@opencode-ai/sdk/v2/client')) as OpenCodeV2ClientModule;
@@ -341,6 +351,7 @@ async function createOpenCodeRuntime(log?: OpenCodeLog): Promise<OpenCodeRuntime
       }
     };
   } catch (error) {
+    activeRuntimeGeneration = null;
     await sidecar.close().catch(() => {
       // Swallow shutdown errors on startup failures.
     });
@@ -382,6 +393,7 @@ export async function getOpenCodeRuntime(log?: OpenCodeLog): Promise<OpenCodeRun
   if (!runtimePromise) {
     runtimePromise = createOpenCodeRuntime(log).catch((error) => {
       // Reset singleton on init failure so next turn can retry initialization.
+      activeRuntimeGeneration = null;
       runtimePromise = null;
       log?.(`runtime:create:error ${getErrorMessage(error)}`);
       throw error;
@@ -410,4 +422,5 @@ export async function shutdownOpenCode(log?: OpenCodeLog): Promise<void> {
   }
 
   runtimePromise = null;
+  activeRuntimeGeneration = null;
 }

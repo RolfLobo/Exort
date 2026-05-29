@@ -116,7 +116,7 @@ const openCodeServerOptionsTemplate: ServerOptions = {
   hostname: '127.0.0.1',
   port: undefined,
   signal: undefined,
-  timeout: undefined,
+  timeout: 15_000,
   config: openCodeConfig
 };
 

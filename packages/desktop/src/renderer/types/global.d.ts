@@ -314,6 +314,12 @@ type RequirementInstallResult = {
   manualCommands: string[];
   logs: string[];
 };
+type OpenCodeSidecarSmokeCheckResult = {
+  ok: boolean;
+  durationMs: number;
+  url?: string;
+  details?: string;
+};
 type SerialMonitorStatus = 'disconnected' | 'connected' | 'streaming';
 type SerialLogDirection = 'rx' | 'tx' | 'system';
 type SerialLogEntry = {
@@ -495,6 +501,13 @@ declare global {
       installRequirement: (payload: {
         id: RequirementId;
       }) => Promise<{ ok: boolean; result?: RequirementInstallResult; error?: string }>;
+      checkOpenCodeSidecarHealth: (payload?: {
+        workspaceRoot?: string;
+        restartRuntime?: boolean;
+      }) => Promise<{ ok: boolean; result?: OpenCodeSidecarSmokeCheckResult; error?: string }>;
+      restartOpenCodeRuntime: (payload?: {
+        workspaceRoot?: string;
+      }) => Promise<{ ok: boolean; result?: OpenCodeSidecarSmokeCheckResult; error?: string }>;
       listArduinoPorts: () => Promise<{ ok: boolean; ports?: ArduinoPortOption[]; error?: string }>;
       listArduinoBoards: () => Promise<{ ok: boolean; boards?: ArduinoBoardOption[]; error?: string }>;
       getArduinoBoardDetails: (payload: {

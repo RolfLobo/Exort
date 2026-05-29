@@ -318,6 +318,12 @@ type RequirementInstallResult = {
   manualCommands: string[];
   logs: string[];
 };
+type OpenCodeSidecarSmokeCheckResult = {
+  ok: boolean;
+  durationMs: number;
+  url?: string;
+  details?: string;
+};
 type SerialMonitorStatus = 'disconnected' | 'connected' | 'streaming';
 type SerialLogDirection = 'rx' | 'tx' | 'system';
 type SerialLogEntry = {
@@ -540,6 +546,18 @@ const electronAPI = {
     ipcRenderer.invoke('requirements:install', payload) as Promise<{
       ok: boolean;
       result?: RequirementInstallResult;
+      error?: string;
+    }>,
+  checkOpenCodeSidecarHealth: (payload?: { workspaceRoot?: string; restartRuntime?: boolean }) =>
+    ipcRenderer.invoke('opencode:smoke-check', payload) as Promise<{
+      ok: boolean;
+      result?: OpenCodeSidecarSmokeCheckResult;
+      error?: string;
+    }>,
+  restartOpenCodeRuntime: (payload?: { workspaceRoot?: string }) =>
+    ipcRenderer.invoke('opencode:restart', payload) as Promise<{
+      ok: boolean;
+      result?: OpenCodeSidecarSmokeCheckResult;
       error?: string;
     }>,
   listArduinoPorts: () =>
