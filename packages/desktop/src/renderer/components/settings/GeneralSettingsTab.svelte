@@ -36,6 +36,7 @@
   let serialBufferInput = $state<string>(String(SERIAL_BUFFER_SIZE_DEFAULT));
   let updaterState = $state<UpdaterState | null>(null);
   let updaterRequestInFlight = $state(false);
+  let updaterDownloadInFlight = $state(false);
   let updaterStatusMessage = $state<string>("Not checked yet.");
 
   onMount(() => {
@@ -50,6 +51,7 @@
       updaterState = payload.state;
       updaterStatusMessage = formatUpdaterStatus(payload.state);
       updaterRequestInFlight = payload.state.status === "checking";
+      updaterDownloadInFlight = payload.state.status === "downloading";
     };
 
     window.electronAPI.onUpdaterEvent(updaterListener);
@@ -58,6 +60,7 @@
       updaterState = response.state;
       updaterStatusMessage = formatUpdaterStatus(response.state);
       updaterRequestInFlight = response.state.status === "checking";
+      updaterDownloadInFlight = response.state.status === "downloading";
     });
 
     return () => {
@@ -153,7 +156,7 @@
       return "Downloading update...";
     }
     if (state.status === "downloaded") {
-      return "Update downloaded. Install from the toast action.";
+      return "Update downloaded. Restarting to install...";
     }
     if (state.status === "up-to-date") return "You are on the latest version.";
     if (state.status === "error") return state.error ?? "Updater error.";
@@ -180,6 +183,32 @@
       updaterState = response.state;
       updaterStatusMessage = formatUpdaterStatus(response.state);
     }
+  }
+
+  async function onDownloadUpdate(): Promise<void> {
+    if (!updaterState?.enabled) return;
+
+    updaterDownloadInFlight = true;
+    const response = await window.electronAPI.downloadUpdate();
+    updaterDownloadInFlight = false;
+
+    if (!response.ok) {
+      updaterStatusMessage = response.error ?? "Failed to download update.";
+      return;
+    }
+    if (response.state) {
+      updaterState = response.state;
+      updaterStatusMessage = formatUpdaterStatus(response.state);
+    }
+  }
+
+  async function onPrimaryUpdaterAction(): Promise<void> {
+    if (!updaterState?.enabled) return;
+    if (updaterState.status === "available") {
+      await onDownloadUpdate();
+      return;
+    }
+    await onCheckForUpdates();
   }
 </script>
 
@@ -301,23 +330,31 @@
   <div class="rounded-lg border border-dark-border bg-dark-bg px-3 py-3">
     <h3 class="text-sm font-semibold text-dark-fg">Desktop Updates</h3>
     <p class="mt-1 text-xs text-dark-fg4">{updaterStatusMessage}</p>
-
     <div class="mt-3 flex flex-wrap items-center gap-3">
-      <button
-        class="inline-flex h-8 items-center justify-center rounded-md border border-dark-border
-         bg-dark-bgS px-2.5 py-0 text-xs font-medium text-dark-fg2 transition-colors hover:border-dark-gray
-          hover:bg-dark-bg1 hover:text-dark-fg disabled:cursor-not-allowed disabled:opacity-60"
-        onclick={() => void onCheckForUpdates()}
-        disabled={updaterRequestInFlight || !updaterState?.enabled}
-      >
-        Check for updates
-      </button>
       <span class="text-xs text-dark-fg3">
         Current version: {updaterState?.currentVersion ?? "unknown"}
       </span>
       <span class="text-xs text-dark-fg3">
         Last checked: {formatCheckedAt(updaterState)}
       </span>
+    </div>
+
+    <div class="mt-3 flex flex-wrap items-center gap-3">
+      <button
+        class="inline-flex h-8 items-center justify-center rounded-md border border-dark-border
+         bg-dark-bgS px-2.5 py-0 text-xs font-medium text-dark-fg2 transition-colors hover:border-dark-gray
+          hover:bg-dark-bg1 hover:text-dark-fg disabled:cursor-not-allowed disabled:opacity-60"
+        onclick={() => void onPrimaryUpdaterAction()}
+        disabled={!updaterState?.enabled || updaterRequestInFlight || updaterDownloadInFlight}
+      >
+        {updaterDownloadInFlight
+          ? "Downloading..."
+          : updaterRequestInFlight
+            ? "Checking..."
+            : updaterState?.status === "available"
+              ? "Download and install"
+              : "Check for updates"}
+      </button>
     </div>
   </div>
 </div>

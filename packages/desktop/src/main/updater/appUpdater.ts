@@ -14,6 +14,15 @@ let initialized = false;
 let quittingForInstall = false;
 let state: UpdaterState = createInitialUpdaterState();
 
+function triggerInstallAndRestart(): void {
+  if (quittingForInstall) return;
+
+  quittingForInstall = true;
+  setImmediate(() => {
+    autoUpdater.quitAndInstall(false, true);
+  });
+}
+
 function createInitialUpdaterState(): UpdaterState {
   return {
     enabled: app.isPackaged,
@@ -129,9 +138,11 @@ function setupAutoUpdater(owner: string, repo: string): void {
       availableVersion: info.version ?? state.availableVersion,
       releaseDate: asIsoString(info.releaseDate) ?? state.releaseDate,
       progressPercent: 100,
-      message: 'Update ready to install.',
+      message: 'Update downloaded. Restarting to install...',
       error: null
     });
+
+    triggerInstallAndRestart();
   });
 
   autoUpdater.on('error', (error) => {
@@ -215,14 +226,14 @@ export function registerUpdaterBridge(params: RegisterUpdaterBridgeParams): void
     if (!state.enabled) {
       return { ok: false, error: state.message ?? 'Updater is disabled for this build.' };
     }
+    if (quittingForInstall) {
+      return { ok: true };
+    }
     if (state.status !== 'downloaded') {
       return { ok: false, error: 'No downloaded update is ready to install.' };
     }
 
-    quittingForInstall = true;
-    setImmediate(() => {
-      autoUpdater.quitAndInstall(false, true);
-    });
+    triggerInstallAndRestart();
 
     return { ok: true };
   });
@@ -231,4 +242,3 @@ export function registerUpdaterBridge(params: RegisterUpdaterBridgeParams): void
 export function isQuittingForInstall(): boolean {
   return quittingForInstall;
 }
-

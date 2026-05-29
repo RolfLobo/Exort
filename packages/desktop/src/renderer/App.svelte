@@ -1297,18 +1297,6 @@
     });
   }
 
-  async function requestUpdateInstall(): Promise<void> {
-    const response = await window.electronAPI.installUpdateAndRestart();
-    if (response.ok) return;
-
-    showToast({
-      id: UPDATE_ERROR_TOAST_ID,
-      title: "Update install failed",
-      message: response.error ?? "Could not install update.",
-      variant: "error",
-    });
-  }
-
   function applyUpdaterState(nextState: UpdaterState): void {
     updaterState = nextState;
 
@@ -1355,13 +1343,9 @@
       dismissToast(UPDATE_DOWNLOADING_TOAST_ID);
       showToast({
         id: UPDATE_DOWNLOADED_TOAST_ID,
-        title: "Update ready",
-        message: `${formatUpdaterVersion(nextState)} downloaded. Restart to install.`,
+        title: "Installing update",
+        message: `${formatUpdaterVersion(nextState)} downloaded. Restarting to install...`,
         variant: "info",
-        actionLabel: "Install",
-        onAction: () => {
-          void requestUpdateInstall();
-        },
       });
       return;
     }
