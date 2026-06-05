@@ -205,8 +205,6 @@
   let updaterEventListener: ((payload: UpdaterEvent) => void) | null = null;
   let updaterState = $state<UpdaterState | null>(null);
   let startupUpdateCheckRequested = false;
-  let startupHadNoSavedWorkspaces = false;
-  let startupFirstWorkspaceWarmupDone = false;
   const modelCatalogLoadInFlightByWorkspaceRoot = new Map<
     string,
     Promise<OpenCodeModelCatalogProvider[] | null>
@@ -1087,7 +1085,6 @@
     if (workspacesBootstrapped) return;
     try {
       const saved = await window.electronAPI.listSavedWorkspaces();
-      startupHadNoSavedWorkspaces = saved.length === 0;
       workspaces = saved.map((workspace) => ({
         ...workspace,
         tree: getPersistedWorkspaceState(workspace.rootPath)?.fileTree ?? [],
@@ -1165,7 +1162,6 @@
 
   async function openFolder() {
     try {
-      const wasWorkspaceEmpty = workspaces.length === 0;
       const result = await window.electronAPI.openFolder();
       if (result.cancelled || !result.workspace || !result.tree) return;
 
@@ -1191,17 +1187,10 @@
       });
       activeWorkspaceId = nextWorkspace.id;
       messages = workspaceMessagesByRoot[nextWorkspace.rootPath] ?? [];
+      warmModelCatalogForWorkspace(nextWorkspace.rootPath);
       await restoreWorkspaceOpenFiles(nextWorkspace.rootPath);
       await ensureWorkspaceSessions(nextWorkspace.id, { force: true });
       await loadWorkspaceHistory(nextWorkspace.id, { force: true });
-      if (
-        startupHadNoSavedWorkspaces &&
-        wasWorkspaceEmpty &&
-        !startupFirstWorkspaceWarmupDone
-      ) {
-        startupFirstWorkspaceWarmupDone = true;
-        warmModelCatalogForWorkspace(nextWorkspace.rootPath);
-      }
       statusText = `Workspace loaded: ${nextWorkspace.rootPath}`;
     } catch (error) {
       statusText =
