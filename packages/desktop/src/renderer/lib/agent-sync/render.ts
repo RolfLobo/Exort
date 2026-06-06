@@ -128,12 +128,19 @@ function summarizeToolPermissionContext(part: AgentSyncPart | undefined): string
     "path",
     "url",
     "command",
+    "cmd",
     "pattern",
     "description",
   ]);
 
   const phrase = target ? `${part.toolName} ${target}` : part.toolName;
   return summarizeDetail(phrase) ?? null;
+}
+
+function getToolCommandForPermission(part: AgentSyncPart | undefined): string | null {
+  if (!part?.input) return null;
+  const input = parseJsonRecord(part.input);
+  return getRecordString(input, ["command", "cmd"]);
 }
 
 function toolStepTitle(
@@ -201,6 +208,7 @@ function buildPermissionStep(
       : "ok"
     : "running";
   const fallbackFromTool = summarizeToolPermissionContext(relatedToolPart);
+  const command = permission.command ?? getToolCommandForPermission(relatedToolPart);
   const resolvedTitle = isGenericPermissionTitle(permission.title)
     ? (fallbackFromTool ?? permission.title)
     : permission.title;
@@ -217,6 +225,7 @@ function buildPermissionStep(
     sessionId: permission.sessionId,
     permission: {
       title: resolvedTitle,
+      command: command ?? undefined,
       reply: permission.reply,
     },
     contentStart: existingStep?.contentStart ?? permission.contentStart,

@@ -19,6 +19,7 @@ function buildPermissionStep(input: {
   requestId: string;
   sessionId: string;
   title: string;
+  command?: string;
   toolCallId?: string;
   reply?: AgentPermissionReply;
   status?: AgentStep["status"];
@@ -40,6 +41,7 @@ function buildPermissionStep(input: {
     sessionId: input.sessionId,
     permission: {
       title: input.title,
+      command: input.command,
       reply: input.reply,
     },
     contentStart: input.contentStart,
@@ -100,6 +102,7 @@ export function upsertPendingPermissionInMessages(
       requestId: pending.id,
       sessionId: pending.sessionId,
       title: pending.title,
+      command: pending.command,
       toolCallId: pending.toolCallId,
     }),
   );
@@ -147,6 +150,7 @@ export function applyInterruptStreamEventInMessages(params: {
         requestId: event.requestId,
         sessionId: event.sessionId,
         title: event.title,
+        command: event.command,
         toolCallId: event.toolCallId,
         contentStart,
       }),
@@ -163,6 +167,7 @@ export function applyInterruptStreamEventInMessages(params: {
         status: reply === "reject" ? "error" : "ok",
         permission: {
           title: step.permission?.title ?? "Permission request",
+          command: step.permission?.command,
           reply,
         },
       }),

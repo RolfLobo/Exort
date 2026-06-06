@@ -48,7 +48,7 @@ type AgentStreamEvent =
       partId: string;
       sessionId?: string;
     }
-  | { type: 'permission_asked'; requestId: string; sessionId: string; toolCallId?: string; title: string }
+  | { type: 'permission_asked'; requestId: string; sessionId: string; toolCallId?: string; title: string; command?: string }
   | { type: 'permission_replied'; requestId: string; sessionId: string; reply: string }
   | {
       type: 'question_asked';
@@ -209,6 +209,7 @@ type AgentPermissionRequest = {
   id: string;
   sessionId: string;
   title: string;
+  command?: string;
   toolCallId?: string;
   messageId?: string;
 };

@@ -61,6 +61,7 @@ export type AgentPermissionRequest = {
   id: string;
   sessionId: string;
   title: string;
+  command?: string;
   toolCallId?: string;
   messageId?: string;
 };
@@ -84,6 +85,7 @@ export type AgentStep = {
   sessionId?: string;
   permission?: {
     title: string;
+    command?: string;
     reply?: AgentPermissionReply;
   };
   question?: {

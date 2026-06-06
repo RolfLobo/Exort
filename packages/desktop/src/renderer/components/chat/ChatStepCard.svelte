@@ -132,6 +132,7 @@
           <PermissionPromptCard
             requestId={step.requestId}
             title={step.permission.title}
+            command={step.permission.command}
             reply={step.permission.reply}
             busy={step.status !== "running"}
             onReply={onPermissionReply}

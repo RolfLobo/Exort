@@ -30,7 +30,7 @@ export type AgentStreamEvent =
       partId: string;
       sessionId?: string;
     }
-  | { type: 'permission_asked'; requestId: string; sessionId: string; toolCallId?: string; title: string }
+  | { type: 'permission_asked'; requestId: string; sessionId: string; toolCallId?: string; title: string; command?: string }
   | { type: 'permission_replied'; requestId: string; sessionId: string; reply: string }
   | {
       type: 'question_asked';
@@ -106,6 +106,7 @@ export type OpenCodePermissionRequest = {
   id: string;
   sessionId: string;
   title: string;
+  command?: string;
   toolCallId?: string;
   messageId?: string;
 };
@@ -406,6 +407,37 @@ function stringifyCompactValue(value: unknown): string | null {
   return null;
 }
 
+function stringifyRawText(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  return null;
+}
+
+function extractCommandFromToolInput(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      const record = asRecord(parsed);
+      return stringifyRawText(record.command) ?? stringifyRawText(record.cmd);
+    } catch {
+      return trimmed;
+    }
+  }
+
+  const record = asRecord(value);
+  return stringifyRawText(record.command) ?? stringifyRawText(record.cmd);
+}
+
 function extractPermissionPattern(value: unknown): string | null {
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -420,6 +452,16 @@ function extractPermissionPattern(value: unknown): string | null {
   }
 
   return null;
+}
+
+function resolvePermissionCommand(value: Record<string, unknown>, tool: Record<string, unknown>): string | null {
+  const metadata = asRecord(value.metadata);
+  return (
+    stringifyRawText(metadata.command) ??
+    stringifyRawText(value.command) ??
+    extractCommandFromToolInput(tool.input) ??
+    extractCommandFromToolInput(value.input)
+  );
 }
 
 function resolvePermissionTitle(value: Record<string, unknown>, tool: Record<string, unknown>): string {
@@ -445,6 +487,10 @@ function resolvePermissionTitle(value: Record<string, unknown>, tool: Record<str
   if (type) return compactDisplayText(type);
   if (pattern) return pattern;
   return title ?? 'Permission';
+}
+
+function extractToolCommandForPermission(input?: string): string | null {
+  return extractCommandFromToolInput(input);
 }
 
 function summarizeToolInputForPermission(toolName: string, input?: string): string {
@@ -1155,11 +1201,13 @@ function parsePermissionRequest(input: unknown): OpenCodePermissionRequest | nul
   const toolCallId = getFirstNonBlankString(tool.callID, tool.callId, value.callID, value.callId);
   const messageId = getFirstNonBlankString(tool.messageID, tool.messageId, value.messageID, value.messageId);
   const title = resolvePermissionTitle(value, tool);
+  const command = resolvePermissionCommand(value, tool);
 
   return {
     id,
     sessionId,
     title,
+    command: command ?? undefined,
     toolCallId: toolCallId ?? undefined,
     messageId: messageId ?? undefined
   };
@@ -2494,7 +2542,8 @@ function parseEvent(rawEvent: unknown, expectedSessionId: string): AgentStreamEv
       requestId: permission.id,
       sessionId: permission.sessionId,
       toolCallId: permission.toolCallId,
-      title: permission.title
+      title: permission.title,
+      command: permission.command
     };
   }
 
@@ -3147,6 +3196,7 @@ export async function runOpenCodeTurn(params: RunOpenCodeTurnParams): Promise<vo
   const toolNames = new Map<string, string>();
   const toolSnapshots = new Map<string, ToolFileSnapshot>();
   const toolPermissionContext = new Map<string, string>();
+  const toolPermissionCommand = new Map<string, string>();
   let promptUserMessageId: string | undefined;
   const handleEvent = (event: AgentStreamEvent) => {
     let nextEvent = event;
@@ -3166,6 +3216,10 @@ export async function runOpenCodeTurn(params: RunOpenCodeTurnParams): Promise<vo
         event.toolCallId,
         summarizeToolInputForPermission(event.name, event.input)
       );
+      const command = extractToolCommandForPermission(event.input);
+      if (command) {
+        toolPermissionCommand.set(event.toolCallId, command);
+      }
     }
 
     if (
@@ -3174,10 +3228,17 @@ export async function runOpenCodeTurn(params: RunOpenCodeTurnParams): Promise<vo
       event.toolCallId
     ) {
       const context = toolPermissionContext.get(event.toolCallId) ?? toolNames.get(event.toolCallId);
+      const command = event.command ?? toolPermissionCommand.get(event.toolCallId);
       if (context) {
         nextEvent = {
           ...event,
-          title: context
+          title: context,
+          command
+        };
+      } else if (command) {
+        nextEvent = {
+          ...event,
+          command
         };
       }
     }

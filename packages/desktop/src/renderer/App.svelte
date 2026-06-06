@@ -1772,6 +1772,7 @@
         toolCallId: permission.toolCallId,
         messageId: permission.messageId,
         title: permission.title,
+        command: permission.command,
       });
     }
 
@@ -1814,6 +1815,7 @@
       status: reply === "reject" ? "error" : "ok",
       permission: {
         title: step.permission?.title ?? step.detail ?? "Permission request",
+        command: step.permission?.command,
         reply,
       },
       detail:
@@ -2730,6 +2732,7 @@
       messageId?: string;
       reply?: AgentPermissionReply;
       status?: AgentStep["status"];
+      command?: string;
     },
   ): void {
     const current = getMessagesForWorkspaceRoot(workspaceRoot);
@@ -2737,6 +2740,7 @@
       id: params.requestId,
       sessionId: params.sessionId,
       title: params.title,
+      command: params.command,
       toolCallId: params.toolCallId,
       messageId: params.messageId,
     });
@@ -2749,6 +2753,7 @@
         status: params.reply === "reject" ? "error" : "ok",
         permission: {
           title: step.permission?.title ?? params.title,
+          command: step.permission?.command ?? params.command,
           reply: params.reply,
         },
       }));

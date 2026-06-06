@@ -61,6 +61,7 @@ export type AgentRuntimeStreamEvent =
       sessionId: string;
       toolCallId?: string;
       title: string;
+      command?: string;
     }
   | {
       type: "permission_replied";
@@ -112,6 +113,7 @@ export type AgentSyncPermission = {
   id: string;
   sessionId: string;
   title: string;
+  command?: string;
   reply?: AgentPermissionReply;
   toolCallId?: string;
   messageId?: string;

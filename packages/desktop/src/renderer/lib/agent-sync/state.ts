@@ -161,6 +161,7 @@ function applyInterruptEvent(
       id: event.requestId,
       sessionId: event.sessionId,
       title: event.title,
+      command: event.command ?? existing?.command,
       toolCallId: event.toolCallId,
       messageId: existing?.messageId ?? resolvedMessageId,
       contentStart: existing?.contentStart ?? resolvedContentStart,
@@ -176,6 +177,7 @@ function applyInterruptEvent(
       title:
         permissions.find((item) => item.id === event.requestId)?.title ??
         "Permission request",
+      command: existing?.command,
       reply: parseAgentPermissionReply(event.reply),
       toolCallId: existing?.toolCallId,
       messageId: existing?.messageId ?? resolvedMessageId,
@@ -437,6 +439,7 @@ export function upsertPendingInterruptsToSyncState(params: {
     id: permission.id,
     sessionId: permission.sessionId,
     title: permission.title,
+    command: permission.command,
     toolCallId: permission.toolCallId,
     messageId: permission.messageId,
     contentStart: undefined,
