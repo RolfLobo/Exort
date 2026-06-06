@@ -108,14 +108,13 @@
     return `data:image/svg+xml;utf8,${encodeURIComponent(getIcon("Blink.ino").svg)}`;
   }
 
-  function projectIndicatorForTab(filePath: string):
+  let activeProjectIndicator = $derived.by(():
     | {
         kind: "arduino" | "platformio";
         title: string;
         src: string;
       }
-    | null {
-    if (filePath !== activeFilePath) return null;
+    | null => {
     if (activeEmbeddedProject?.kind === "arduino") {
       return {
         kind: "arduino",
@@ -131,7 +130,7 @@
       };
     }
     return null;
-  }
+  });
 
   function reportInnerSplitContainer(node: HTMLDivElement) {
     onInnerSplitContainerElChange(node);
@@ -224,7 +223,6 @@
                 </div>
               {:else}
                 {#each visibleOpenFileTabs as tabPath (tabPath)}
-                  {@const projectIndicator = projectIndicatorForTab(tabPath)}
                   <div
                     class={`group flex min-w-0 max-w-64 items-center gap-2 border-r border-dark-border px-2 py-2 text-left text-xs  ${
                       tabPath === activeFilePath
@@ -253,16 +251,6 @@
                         aria-hidden="true"
                         draggable="false"
                       />
-                      {#if projectIndicator}
-                        <img
-                          class="h-4 w-4 shrink-0"
-                          src={projectIndicator.src}
-                          alt=""
-                          title={projectIndicator.title}
-                          aria-label={projectIndicator.title}
-                          draggable="false"
-                        />
-                      {/if}
                       <span class="truncate">{labelFromPath(tabPath)}</span>
                     </div>
 
@@ -286,6 +274,22 @@
                 {/each}
               {/if}
             </div>
+
+            {#if activeProjectIndicator}
+              <div
+                class="flex h-full shrink-0 items-center border-l border-dark-border px-2"
+                title={activeProjectIndicator.title}
+                aria-label={activeProjectIndicator.title}
+              >
+                <img
+                  class="h-4 w-4 shrink-0"
+                  src={activeProjectIndicator.src}
+                  alt=""
+                  aria-hidden="true"
+                  draggable="false"
+                />
+              </div>
+            {/if}
 
             <!-- <div class="border-l border-dark-border p-1">
               <button
