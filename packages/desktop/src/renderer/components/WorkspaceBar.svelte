@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Plus, Settings } from "lucide-svelte";
+  import { CircleQuestionMark, Plus, Settings } from "lucide-svelte";
   import WorkspacePreviewFlyout from "./WorkspacePreviewFlyout.svelte";
   import type { AgentSessionSummary } from "../lib/types";
 
@@ -14,6 +14,7 @@
     x: number;
     y: number;
   };
+  const HELP_DISCORD_URL = "https://discord.gg/xmcmcWkr4V";
   const workspaceContextMenuWidthPx = 160;
   const workspaceContextMenuEstimatedHeightPx = 48;
   const workspaceContextMenuViewportPaddingPx = 8;
@@ -192,6 +193,12 @@
     }
   }
 
+  async function openHelp(): Promise<void> {
+    await window.electronAPI.openBrowserUrl({
+      url: HELP_DISCORD_URL,
+    });
+  }
+
   $effect(() => {
     if (!workspaceContextMenu) return;
 
@@ -282,15 +289,24 @@
       </div>
     {/each}
   </div>
-  <div class="mt-3 flex w-full justify-center px-2">
+  <div class="mt-3 flex w-full flex-col items-center gap-2 px-2">
     <button
-      class="flex h-10 w-10 items-center justify-center rounded-md border border-dark-border
-      bg-dark-bg text-dark-fg2 transition-colors hover:bg-dark-blue/20 hover:text-dark-fg"
+      class="flex h-10 w-10 items-center justify-center rounded-md text-dark-fg3
+      transition-colors hover:bg-dark-blue/10 hover:text-dark-fg"
       onclick={() => onOpenSettings()}
       aria-label="Open settings"
       title="Settings"
     >
       <Settings class="h-4 w-4" />
+    </button>
+    <button
+      class="flex h-10 w-10 items-center justify-center rounded-md text-dark-fg3
+      transition-colors hover:bg-dark-blue/10 hover:text-dark-fg"
+      onclick={() => void openHelp()}
+      aria-label="Open help"
+      title="Help"
+    >
+      <CircleQuestionMark class="h-4 w-4" />
     </button>
   </div>
 </div>

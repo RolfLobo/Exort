@@ -215,7 +215,7 @@ function sanitizeMonacoThemeId(value: unknown): MonacoThemeId {
   if (value === 'hc-black') return 'hc-black';
   if (value === 'hc-light') return 'hc-light';
   if (value === 'gruvbox-dark') return 'gruvbox-dark';
-  return 'vs-dark';
+  return 'gruvbox-dark';
 }
 
 function sanitizeChatFontSizePreset(value: unknown): ChatFontSizePreset {
@@ -272,7 +272,7 @@ export function createDefaultAppState(): AppState {
       bufferSize: SERIAL_BUFFER_SIZE_DEFAULT
     },
     appearance: {
-      monacoTheme: 'vs-dark',
+      monacoTheme: 'gruvbox-dark',
       chatFontSize: 'default'
     },
     agent: {

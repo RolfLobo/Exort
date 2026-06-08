@@ -1,6 +1,6 @@
 import type { SerialLogEntry } from '../types';
 
-export const SERIAL_BUFFER_SIZE_DEFAULT = 500;
+export const SERIAL_BUFFER_SIZE_DEFAULT = 150;
 export const SERIAL_BUFFER_SIZE_MIN = 100;
 export const SERIAL_BUFFER_SIZE_MAX = 5000;
 

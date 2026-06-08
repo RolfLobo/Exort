@@ -53,7 +53,7 @@ type SerialDisconnectPayload = {
 const MAX_BUFFER_BYTES = 100 * 1024;
 const STREAMING_IDLE_MS = 1500;
 const RX_FRAGMENT_FLUSH_MS = 90;
-const DEFAULT_MAX_ENTRIES = 500;
+const DEFAULT_MAX_ENTRIES = 150;
 const MIN_MAX_ENTRIES = 100;
 const MAX_MAX_ENTRIES = 5000;
 

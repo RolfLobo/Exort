@@ -29,7 +29,7 @@
     { value: "large", label: "Large" },
   ];
 
-  let monacoTheme = $state<MonacoThemeId>("vs-dark");
+  let monacoTheme = $state<MonacoThemeId>("gruvbox-dark");
   let chatFontSize = $state<ChatFontSizePreset>("default");
   let showReasoning = $state(false);
   let serialBufferSize = $state<number>(SERIAL_BUFFER_SIZE_DEFAULT);

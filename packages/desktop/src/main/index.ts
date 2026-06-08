@@ -193,7 +193,7 @@ const EDITOR_MAX_WIDTH_PCT = 85;
 const MAX_RECENT_WORKSPACES = 12;
 const APP_NAME = 'Exort';
 const SERIAL_BAUD_RATE_DEFAULT = 9600;
-const SERIAL_BUFFER_SIZE_DEFAULT = 500;
+const SERIAL_BUFFER_SIZE_DEFAULT = 150;
 const SERIAL_BUFFER_SIZE_MIN = 100;
 const SERIAL_BUFFER_SIZE_MAX = 5000;
 const OPEN_CODE_SMOKE_CHECK_TIMEOUT_MS = 30_000;
@@ -327,7 +327,7 @@ function sanitizeMonacoThemeId(value: unknown): MonacoThemeId {
   if (value === 'hc-black') return 'hc-black';
   if (value === 'hc-light') return 'hc-light';
   if (value === 'gruvbox-dark') return 'gruvbox-dark';
-  return 'vs-dark';
+  return 'gruvbox-dark';
 }
 
 function sanitizeChatFontSizePreset(value: unknown): ChatFontSizePreset {
@@ -450,7 +450,7 @@ function createDefaultAppState(): AppState {
       bufferSize: SERIAL_BUFFER_SIZE_DEFAULT
     },
     appearance: {
-      monacoTheme: 'vs-dark',
+      monacoTheme: 'gruvbox-dark',
       chatFontSize: 'default'
     },
     agent: {
