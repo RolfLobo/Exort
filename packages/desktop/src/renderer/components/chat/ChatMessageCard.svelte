@@ -995,7 +995,7 @@
 </script>
 
 <div
-  class={`${isUser ? "group my-7 relative ml-auto flex w-fit max-w-[calc(100%-2rem)] flex-col items-end gap-2" : "px-2 py-2"}`}
+  class={`group relative ${isUser ? "my-7 ml-auto flex w-fit max-w-[calc(100%-2rem)] flex-col items-end gap-2" : "mb-7 px-2 py-2"}`}
 >
   {#if !isUser}
     <div class="mb-2 flex items-center justify-between gap-2">
@@ -1126,7 +1126,7 @@
 
     {#if shouldRenderUserBubble}
       <p
-        class="max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-2xl bg-dark-bg1 px-4 py-2 text-sm font-thin leading-1 text-dark-fg0"
+        class="allow-text-selection max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-2xl bg-dark-bg1 px-4 py-2 text-sm font-thin leading-1 text-dark-fg0"
       >
         {userVisibleContent}
       </p>
@@ -1141,6 +1141,24 @@
       onclick={copyMessage}
       disabled={!message.content.trim().length}
       aria-label={copied ? "Copied prompt" : "Copy prompt"}
+      title={copied ? "Copied" : "Copy"}
+    >
+      {#if copied}
+        <CopyCheck class="h-4 w-4" />
+      {:else}
+        <Copy class="h-4 w-4" />
+      {/if}
+    </button>
+  {/if}
+  {#if isAssistant}
+    <button
+      class={`absolute left-2 top-full mt-0 inline-flex h-7 w-7 items-center
+       justify-center rounded opacity-0 transition-opacity duration-150 
+       disabled:cursor-not-allowed disabled:opacity-40 group-hover:opacity-100 
+       focus-visible:opacity-100 ${copied ? "text-dark-fg1" : "text-dark-fg3 hover:text-dark-fg1 focus-visible:text-dark-fg1"}`}
+      onclick={copyMessage}
+      disabled={!message.content.trim().length}
+      aria-label={copied ? "Copied response" : "Copy response"}
       title={copied ? "Copied" : "Copy"}
     >
       {#if copied}
