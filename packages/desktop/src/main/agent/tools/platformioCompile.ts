@@ -46,6 +46,11 @@ function buildRuntimePathEntries(): string[] {
   if (home) {
     entries.push(path.join(home, '.local', 'bin'));
     entries.push(path.join(home, 'bin'));
+    entries.push(
+      process.platform === 'win32'
+        ? path.join(home, '.platformio', 'penv', 'Scripts')
+        : path.join(home, '.platformio', 'penv', 'bin')
+    );
   }
 
   return entries;

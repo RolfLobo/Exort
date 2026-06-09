@@ -26,7 +26,8 @@ function getCommonBinaryDirs(): string[] {
       '/opt/local/bin',
       '/opt/local/sbin',
       path.join(homeDir, '.local', 'bin'),
-      path.join(homeDir, 'bin')
+      path.join(homeDir, 'bin'),
+      path.join(homeDir, '.platformio', 'penv', 'bin')
     ];
   }
 
@@ -37,8 +38,13 @@ function getCommonBinaryDirs(): string[] {
       '/usr/bin',
       '/usr/sbin',
       path.join(homeDir, '.local', 'bin'),
-      path.join(homeDir, 'bin')
+      path.join(homeDir, 'bin'),
+      path.join(homeDir, '.platformio', 'penv', 'bin')
     ];
+  }
+
+  if (process.platform === 'win32') {
+    return [path.join(homeDir, '.platformio', 'penv', 'Scripts')];
   }
 
   return [];

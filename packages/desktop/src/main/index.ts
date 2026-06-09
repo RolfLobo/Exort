@@ -66,6 +66,7 @@ import {
 } from './requirements/runtimeRequirements.js';
 import { registerProvidersBridge } from './providers/providerBridge.js';
 import { SerialMonitorHandler, type SerialMonitorEvent } from './serial/serialHandler.js';
+import { applyLoginShellPath } from './shellEnv.js';
 import { registerUpdaterBridge } from './updater/appUpdater.js';
 
 type WorkspaceInfo = {
@@ -981,7 +982,11 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Recover the user's real login-shell PATH before anything spawns a CLI. GUI-launched apps
+  // inherit a minimal PATH and otherwise can't find user-installed tools (e.g. PlatformIO).
+  await applyLoginShellPath();
+
   app.setAboutPanelOptions({
     applicationName: APP_NAME
   });
